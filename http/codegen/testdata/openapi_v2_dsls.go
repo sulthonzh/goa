@@ -347,3 +347,51 @@ var SecurityDSL = func() {
 		})
 	})
 }
+
+var ServerHostWithVariablesDSL = func() {
+	var _ = API("test", func() {
+		Server("test", func() {
+			Host("localhost", func() {
+				URI("https://{version}.goa.design")
+				Variable("version", String, "API Version", func() {
+					Default("v1")
+				})
+			})
+		})
+	})
+	Service("testService", func() {
+		Method("testEndpoint", func() {
+			Payload(Empty)
+			Result(Empty)
+			HTTP(func() {
+				POST("/")
+			})
+		})
+	})
+}
+
+var WithSpacesDSL = func() {
+	var Bar = Type("bar", func() {
+		Attribute("string", String, func() {
+			Example("")
+		})
+	})
+	var FooBar = ResultType("application/vnd.goa.foobar", func() {
+		TypeName("Foo Bar")
+		Attribute("foo", String, func() {
+			Example("")
+		})
+		Attribute("bar", ArrayOf(Bar))
+	})
+	Service("test service", func() {
+		Method("test endpoint", func() {
+			Payload(Bar)
+			Result(FooBar)
+			HTTP(func() {
+				POST("/")
+				Response(StatusOK)
+				Response(StatusNotFound)
+			})
+		})
+	})
+}

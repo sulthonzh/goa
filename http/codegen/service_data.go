@@ -674,7 +674,7 @@ func (d ServicesData) analyze(hs *expr.HTTPServiceExpr) *ServiceData {
 					name := fmt.Sprintf("%s%sPath%s", ep.VarName, svc.StructName, suffix)
 					for j, arg := range params {
 						att := pathParamsObj.Attribute(arg)
-						pointer := a.Params.IsPrimitivePointer(arg, false)
+						pointer := a.Params.IsPrimitivePointer(arg, true)
 						name := rd.Scope.Name(codegen.Goify(arg, false))
 						var vcode string
 						if att.Validation != nil {
@@ -769,8 +769,12 @@ func (d ServicesData) analyze(hs *expr.HTTPServiceExpr) *ServiceData {
 			)
 			{
 				name = fmt.Sprintf("Build%sRequest", ep.VarName)
+				s := codegen.NewNameScope()
+				s.Unique("c") // 'c' is reserved as the client's receiver name.
 				for _, ca := range routes[0].PathInit.ClientArgs {
 					if ca.FieldName != "" {
+						ca.Name = s.Unique(ca.Name)
+						ca.Ref = ca.Name
 						args = append(args, ca)
 					}
 				}
@@ -1175,11 +1179,10 @@ func buildPayloadData(e *expr.HTTPEndpointExpr, sd *ServiceData) *PayloadData {
 			if err == nil {
 				sd.ServerTransformHelpers = codegen.AppendHelpers(sd.ServerTransformHelpers, helpers)
 			}
-			// The client code for building the method payload from
-			// a request body is used by the CLI tool to build the
-			// payload given to the client endpoint. It differs
-			// because the body type there does not use pointers for
-			// all fields (no need to validate).
+			// The client code for building the method payload from a request
+			// body is used by the CLI tool to build the payload given to the
+			// client endpoint. It differs because the body type there does not
+			// use pointers for all fields (no need to validate).
 			clientCode, helpers, err = marshal(e.Body, pAtt, "body", "v", httpclictx, svcctx)
 			if err == nil {
 				sd.ClientTransformHelpers = codegen.AppendHelpers(sd.ClientTransformHelpers, helpers)
@@ -1660,13 +1663,23 @@ func buildErrorsData(e *expr.HTTPEndpointExpr, sd *ServiceData) []*ErrorGroupDat
 			}
 
 			headers := extractHeaders(v.Response.Headers, v.ErrorExpr.AttributeExpr, svcctx, sd.Scope)
+			var mustValidate bool
+			{
+				for _, h := range headers {
+					if h.Validate != "" || h.Required || needConversion(h.Type) {
+						mustValidate = true
+						break
+					}
+				}
+			}
 			responseData = &ResponseData{
-				StatusCode:  statusCodeToHTTPConst(v.Response.StatusCode),
-				Headers:     headers,
-				ErrorHeader: v.Name,
-				ServerBody:  serverBodyData,
-				ClientBody:  clientBodyData,
-				ResultInit:  init,
+				StatusCode:   statusCodeToHTTPConst(v.Response.StatusCode),
+				Headers:      headers,
+				ErrorHeader:  v.Name,
+				ServerBody:   serverBodyData,
+				ClientBody:   clientBodyData,
+				ResultInit:   init,
+				MustValidate: mustValidate,
 			}
 		}
 
@@ -2059,9 +2072,11 @@ func buildResponseBodyType(body, att *expr.AttributeExpr, e *expr.HTTPEndpointEx
 			def = goTypeDef(sd.Scope, body, !svr, svr)
 			validateRef = codegen.RecursiveValidationCode(body, httpctx, true, "body")
 		} else {
-			// response body is a primitive type.
-			varname = sd.Scope.GoTypeRef(body)
+			// response body is a primitive type. They are used as non-pointers when
+			// encoding/decoding responses.
+			httpctx = httpContext("", sd.Scope, false, true)
 			validateRef = codegen.RecursiveValidationCode(body, httpctx, true, "body")
+			varname = sd.Scope.GoTypeRef(body)
 			desc = body.Description
 		}
 	}
@@ -2086,6 +2101,7 @@ func buildResponseBodyType(body, att *expr.AttributeExpr, e *expr.HTTPEndpointEx
 			var (
 				name    string
 				desc    string
+				rtref   string
 				code    string
 				origin  string
 				err     error
@@ -2095,7 +2111,15 @@ func buildResponseBodyType(body, att *expr.AttributeExpr, e *expr.HTTPEndpointEx
 				svc       = sd.Service
 			)
 			{
-				name = fmt.Sprintf("New%s", codegen.Goify(sd.Scope.GoTypeName(body), true))
+				var rtname string
+				if _, ok := body.Type.(expr.UserType); !ok && !expr.IsPrimitive(body.Type) {
+					rtname = codegen.Goify(e.Name(), true) + "ResponseBody"
+					rtref = rtname
+				} else {
+					rtname = codegen.Goify(sd.Scope.GoTypeName(body), true)
+					rtref = sd.Scope.GoTypeRef(body)
+				}
+				name = fmt.Sprintf("New%s", rtname)
 				desc = fmt.Sprintf("%s builds the HTTP response body from the result of the %q endpoint of the %q service.",
 					name, e.Name(), svc.Name)
 				if view != nil {
@@ -2135,7 +2159,7 @@ func buildResponseBodyType(body, att *expr.AttributeExpr, e *expr.HTTPEndpointEx
 			init = &InitData{
 				Name:                name,
 				Description:         desc,
-				ReturnTypeRef:       sd.Scope.GoTypeRef(body),
+				ReturnTypeRef:       rtref,
 				ReturnTypeAttribute: codegen.Goify(origin, true),
 				ServerCode:          code,
 				ServerArgs:          []*InitArgData{&arg},
@@ -2372,7 +2396,8 @@ func attributeTypeData(ut expr.UserType, req, ptr, server bool, rd *ServiceData)
 	}
 }
 
-// httpContext returns an attribute context for HTTP attributes.
+// httpContext returns a context for attributes of types used to marshal and
+// unmarshal HTTP requests and responses.
 //
 // pkg is the package name where the body type exists
 //
@@ -2560,9 +2585,9 @@ const (
 	// requestInitT is the template used to render the code of HTTP
 	// request constructors.
 	requestInitT = `
-{{- if .PathInit.ClientArgs }}
+{{- if .Args }}
 	var (
-	{{- range .PathInit.ClientArgs }}
+	{{- range .Args }}
 	{{ .Name }} {{ .TypeRef }}
 	{{- end }}
 	)
@@ -2593,7 +2618,7 @@ const (
 			scheme = "wss"
 		}
 	{{- end }}
-	u := &url.URL{Scheme: {{ if .IsStreaming }}scheme{{ else }}c.scheme{{ end }}, Host: c.host, Path: {{ .PathInit.Name }}({{ range .PathInit.ClientArgs }}{{ .Ref }}, {{ end }})}
+	u := &url.URL{Scheme: {{ if .IsStreaming }}scheme{{ else }}c.scheme{{ end }}, Host: c.host, Path: {{ .PathInit.Name }}({{ range .Args }}{{ .Ref }}, {{ end }})}
 	req, err := http.NewRequest("{{ .Verb }}", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("{{ .ServiceName }}", "{{ .EndpointName }}", u.String(), err)

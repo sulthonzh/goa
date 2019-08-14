@@ -121,6 +121,64 @@ func DecodeMethodEmptyBodyResultMultipleViewResponse(decoder func(*http.Response
 }
 `
 
+var ExplicitBodyPrimitiveResultDecodeCode = `// DecodeMethodExplicitBodyPrimitiveResultMultipleViewResponse returns a
+// decoder for responses returned by the
+// ServiceExplicitBodyPrimitiveResultMultipleView
+// MethodExplicitBodyPrimitiveResultMultipleView endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+func DecodeMethodExplicitBodyPrimitiveResultMultipleViewResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (interface{}, error) {
+	return func(resp *http.Response) (interface{}, error) {
+		if restoreBody {
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body string
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("ServiceExplicitBodyPrimitiveResultMultipleView", "MethodExplicitBodyPrimitiveResultMultipleView", err)
+			}
+			if utf8.RuneCountInString(body) < 5 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body", body, utf8.RuneCountInString(body), 5, true))
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("ServiceExplicitBodyPrimitiveResultMultipleView", "MethodExplicitBodyPrimitiveResultMultipleView", err)
+			}
+			var (
+				c *string
+			)
+			cRaw := resp.Header.Get("Location")
+			if cRaw != "" {
+				c = &cRaw
+			}
+			p := NewMethodExplicitBodyPrimitiveResultMultipleViewResulttypemultipleviewsOK(body, c)
+			view := resp.Header.Get("goa-view")
+			vres := &serviceexplicitbodyprimitiveresultmultipleviewviews.Resulttypemultipleviews{p, view}
+			if err = serviceexplicitbodyprimitiveresultmultipleviewviews.ValidateResulttypemultipleviews(vres); err != nil {
+				return nil, goahttp.ErrValidationError("ServiceExplicitBodyPrimitiveResultMultipleView", "MethodExplicitBodyPrimitiveResultMultipleView", err)
+			}
+			res := serviceexplicitbodyprimitiveresultmultipleview.NewResulttypemultipleviews(vres)
+			return res, nil
+		default:
+			body, _ := ioutil.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("ServiceExplicitBodyPrimitiveResultMultipleView", "MethodExplicitBodyPrimitiveResultMultipleView", resp.StatusCode, string(body))
+		}
+	}
+}
+`
+
 var ExplicitBodyUserResultMultipleViewsDecodeCode = `// DecodeMethodExplicitBodyUserResultMultipleViewResponse returns a decoder for
 // responses returned by the ServiceExplicitBodyUserResultMultipleView
 // MethodExplicitBodyUserResultMultipleView endpoint. restoreBody controls
@@ -250,14 +308,14 @@ func DecodeMethodTagMultipleViewsResponse(decoder func(*http.Response) goahttp.D
 				c = &cRaw
 			}
 			p := NewMethodTagMultipleViewsResulttypemultipleviewsAccepted(&body, c)
+			tmp := "value"
+			p.B = &tmp
 			view := resp.Header.Get("goa-view")
 			vres := &servicetagmultipleviewsviews.Resulttypemultipleviews{p, view}
 			if err = servicetagmultipleviewsviews.ValidateResulttypemultipleviews(vres); err != nil {
 				return nil, goahttp.ErrValidationError("ServiceTagMultipleViews", "MethodTagMultipleViews", err)
 			}
 			res := servicetagmultipleviews.NewResulttypemultipleviews(vres)
-			tmp := "value"
-			res.B = &tmp
 			return res, nil
 		case http.StatusOK:
 			var (
@@ -638,6 +696,90 @@ func DecodeMethodAResponse(decoder func(*http.Response) goahttp.Decoder, restore
 		default:
 			body, _ := ioutil.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("ServiceWithHeadersBlockViewedResult", "MethodA", resp.StatusCode, string(body))
+		}
+	}
+}
+`
+
+var ValidateErrorResponseTypeDecodeCode = `// DecodeMethodAResponse returns a decoder for responses returned by the
+// ValidateErrorResponseType MethodA endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeMethodAResponse may return the following errors:
+//	- "some_error" (type *validateerrorresponsetype.AError): http.StatusBadRequest
+//	- error: internal error
+func DecodeMethodAResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (interface{}, error) {
+	return func(resp *http.Response) (interface{}, error) {
+		if restoreBody {
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				required int
+				err      error
+			)
+			{
+				requiredRaw := resp.Header.Get("X-Request-Id")
+				if requiredRaw == "" {
+					return nil, goahttp.ErrValidationError("ValidateErrorResponseType", "MethodA", goa.MissingFieldError("X-Request-ID", "header"))
+				}
+				v, err2 := strconv.ParseInt(requiredRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("required", requiredRaw, "integer"))
+				}
+				required = int(v)
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("ValidateErrorResponseType", "MethodA", err)
+			}
+			p := NewMethodAAResultOK(required)
+			view := "default"
+			vres := &validateerrorresponsetypeviews.AResult{p, view}
+			res := validateerrorresponsetype.NewAResult(vres)
+			return res, nil
+		case http.StatusBadRequest:
+			var (
+				error    string
+				numOccur *int
+				err      error
+			)
+			errorRaw := resp.Header.Get("X-Application-Error")
+			if errorRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("X-Application-Error", "header"))
+			}
+			error = errorRaw
+			{
+				numOccurRaw := resp.Header.Get("X-Occur")
+				if numOccurRaw != "" {
+					v, err2 := strconv.ParseInt(numOccurRaw, 10, strconv.IntSize)
+					if err2 != nil {
+						err = goa.MergeErrors(err, goa.InvalidFieldTypeError("numOccur", numOccurRaw, "integer"))
+					}
+					pv := int(v)
+					numOccur = &pv
+				}
+			}
+			if numOccur != nil {
+				if *numOccur < 1 {
+					err = goa.MergeErrors(err, goa.InvalidRangeError("numOccur", *numOccur, 1, true))
+				}
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("ValidateErrorResponseType", "MethodA", err)
+			}
+			return nil, NewMethodASomeError(error, numOccur)
+		default:
+			body, _ := ioutil.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("ValidateErrorResponseType", "MethodA", resp.StatusCode, string(body))
 		}
 	}
 }

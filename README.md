@@ -7,11 +7,9 @@ design-first approach.
 
 ---
 [![Build Status](https://travis-ci.org/goadesign/goa.svg?branch=v3)](https://travis-ci.org/goadesign/goa)
-[![Windows Build status](https://ci.appveyor.com/api/projects/status/vixp37loj5i6qmaf/branch/v3?svg=true)](https://ci.appveyor.com/project/RaphaelSimon/goa-oqtis/branch/master)
+[![Windows Build status](https://ci.appveyor.com/api/projects/status/vixp37loj5i6qmaf/branch/v3?svg=true)](https://ci.appveyor.com/project/RaphaelSimon/goa-oqtis/branch/v3)
 [![Godoc](https://godoc.org/goa.design/goa?status.svg)](https://godoc.org/goa.design/goa)
 [![Slack](https://img.shields.io/badge/slack-gophers-orange.svg?style=flat)](https://gophers.slack.com/messages/goa/)
-
-## [Goa v2 and v3 released!!!](https://goa.design/blog/009-v_3_0_0/)
 
 ## Overview
 
@@ -110,7 +108,7 @@ without having to make changes.
 Releases are tagged with the corresponding version number. There is also a
 branch for each major version (`v1`, `v2` and `v3`).
 
-Current Release: `v3.0.0`
+Current Release: `v3.0.3`
 
 ## Teaser
 
@@ -252,7 +250,7 @@ request so all we have to do is to perform the actual sum. Edit the file
 
 ```go
 // Add returns the sum of attributes a and b of p.
-func (s *calcsrvc) Add(ctx context.Context, p *calcsvc.AddPayload) (res int, err error) {
+func (s *calcsrvc) Add(ctx context.Context, p *calc.AddPayload) (res int, err error) {
         return p.A + p.B, nil
 }
 ```

@@ -10,6 +10,7 @@ import (
 	grpcm "goa.design/goa/v3/grpc/middleware"
 	"goa.design/goa/v3/middleware"
 	"goa.design/goa/v3/middleware/xray"
+	"goa.design/goa/v3/middleware/xray/xraytest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -174,7 +175,7 @@ func TestUnaryServerMiddleware(t *testing.T) {
 				ctx = peer.NewContext(ctx, &peer.Peer{Addr: &mockAddr{c.Request.RemoteAddr}})
 			}
 
-			messages := xray.ReadUDP(t, udplisten, expMsgs, func() {
+			messages := xraytest.ReadUDP(t, udplisten, expMsgs, func() {
 				m(ctx, &wrappers.StringValue{Value: "request"}, unary, handler)
 			})
 			if expMsgs == 0 {
@@ -182,13 +183,13 @@ func TestUnaryServerMiddleware(t *testing.T) {
 			}
 
 			// expect the first message is InProgress
-			s := xray.ExtractSegment(t, messages[0])
+			s := xraytest.ExtractSegment(t, messages[0])
 			if !s.InProgress {
 				t.Fatal("expected first segment to be InProgress but it was not")
 			}
 
 			// second message
-			s = xray.ExtractSegment(t, messages[1])
+			s = xraytest.ExtractSegment(t, messages[1])
 			if s.Name != "service" {
 				t.Errorf("unexpected segment name, expected \"service\" - got %q", s.Name)
 			}
@@ -320,7 +321,7 @@ func TestStreamServerMiddleware(t *testing.T) {
 			}
 			wss := grpcm.NewWrappedServerStream(ctx, &testServerStream{})
 
-			messages := xray.ReadUDP(t, udplisten, expMsgs, func() {
+			messages := xraytest.ReadUDP(t, udplisten, expMsgs, func() {
 				m(nil, wss, streamInfo, handler)
 			})
 			if expMsgs == 0 {
@@ -328,13 +329,13 @@ func TestStreamServerMiddleware(t *testing.T) {
 			}
 
 			// expect the first message is InProgress
-			s := xray.ExtractSegment(t, messages[0])
+			s := xraytest.ExtractSegment(t, messages[0])
 			if !s.InProgress {
 				t.Fatal("expected first segment to be InProgress but it was not")
 			}
 
 			// second message
-			s = xray.ExtractSegment(t, messages[1])
+			s = xraytest.ExtractSegment(t, messages[1])
 			if s.Name != "service" {
 				t.Errorf("unexpected segment name, expected \"service\" - got %q", s.Name)
 			}
@@ -437,7 +438,7 @@ func TestUnaryClient(t *testing.T) {
 				ctx = context.WithValue(ctx, xray.SegKey, segment)
 			}
 
-			messages := xray.ReadUDP(t, udplisten, expMsgs, func() {
+			messages := xraytest.ReadUDP(t, udplisten, expMsgs, func() {
 				UnaryClient(host)(ctx, "Test.Test", req, resp, nil, invoker)
 			})
 			if expMsgs == 0 {
@@ -445,13 +446,13 @@ func TestUnaryClient(t *testing.T) {
 			}
 
 			// expect the first message is InProgress
-			s := xray.ExtractSegment(t, messages[0])
+			s := xraytest.ExtractSegment(t, messages[0])
 			if !s.InProgress {
 				t.Fatal("expected first segment to be InProgress but it was not")
 			}
 
 			// second message
-			s = xray.ExtractSegment(t, messages[1])
+			s = xraytest.ExtractSegment(t, messages[1])
 			if s.Name != host {
 				t.Errorf("unexpected segment name: expected %q, got %q", host, s.Name)
 			}
@@ -517,14 +518,16 @@ func TestStreamClient(t *testing.T) {
 		StatusCode   codes.Code
 		RequestError bool // synchronous error when establishing the stream.
 		StreamError  bool // error during the stream when calling RecvMsg, SendMsg, etc.
+		StreamClosed bool // stream closed (returned io.EOF) when calling RecvMsg, SendMsg, etc.
 		ClientStream grpc.ClientStream
 	}{
-		{"no segment in context", false, codes.OK, false, false, &mockClientStream{}},
-		{"segment in context", true, codes.OK, false, true, &mockClientStream{err: io.EOF}},
-		{"segment in context - failed request", true, codes.InvalidArgument, true, false, &mockClientStream{}},
-		{"segment in context - error", true, codes.Internal, true, false, &mockClientStream{}},
-		{"segment in context - failed stream", true, codes.OK, false, true, &mockClientStream{err: status.Error(codes.Canceled, "canceled")}},
-		{"segment in context - stream error", true, codes.OK, false, true, &mockClientStream{err: status.Error(codes.Internal, "error")}},
+		{"no segment in context", false, codes.OK, false, false, false, &mockClientStream{}},
+		{"segment in context", true, codes.OK, false, false, false, &mockClientStream{}},
+		{"segment in context - closed", true, codes.OK, false, false, true, &mockClientStream{err: io.EOF}},
+		{"segment in context - failed request", true, codes.InvalidArgument, true, false, false, &mockClientStream{}},
+		{"segment in context - error", true, codes.Internal, true, false, false, &mockClientStream{}},
+		{"segment in context - failed stream", true, codes.OK, false, true, false, &mockClientStream{err: status.Error(codes.Canceled, "canceled")}},
+		{"segment in context - stream error", true, codes.OK, false, true, false, &mockClientStream{err: status.Error(codes.Internal, "error")}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -538,7 +541,13 @@ func TestStreamClient(t *testing.T) {
 			ctx := context.Background()
 			expMsgs := 0 // expected number of messages to be sent to X-Ray daemon
 			if tc.Segment {
-				expMsgs = 2
+				if tc.RequestError || tc.StreamError || tc.StreamClosed {
+					// In progress and complete message
+					expMsgs = 2
+				} else {
+					// In progress message only
+					expMsgs = 1
+				}
 				xrayConn, err := net.Dial("udp", udplisten)
 				if err != nil {
 					t.Fatalf("error creating xray daemon connection: %v", err)
@@ -548,7 +557,7 @@ func TestStreamClient(t *testing.T) {
 				ctx = context.WithValue(ctx, xray.SegKey, segment)
 			}
 
-			messages := xray.ReadUDP(t, udplisten, expMsgs, func() {
+			messages := xraytest.ReadUDP(t, udplisten, expMsgs, func() {
 				cs, err := StreamClient(host)(ctx, nil, nil, "Test.Test", streamer)
 				errored := err != nil
 				if tc.RequestError != errored {
@@ -557,7 +566,11 @@ func TestStreamClient(t *testing.T) {
 				if err == nil {
 					var msg interface{}
 					err2 := cs.RecvMsg(msg)
-					errored := err2 != nil
+					closed := err2 == io.EOF
+					if tc.StreamClosed != closed {
+						t.Errorf("expected stream closed to be %v, got %v", tc.StreamClosed, closed)
+					}
+					errored := !closed && err2 != nil
 					if tc.StreamError != errored {
 						t.Errorf("expected stream error to be %v, got %v", tc.StreamError, errored)
 					}
@@ -567,14 +580,23 @@ func TestStreamClient(t *testing.T) {
 				return
 			}
 
+			if len(messages) < 1 {
+				t.Fatalf("did not receive message %v", 1)
+			}
 			// expect the first message is InProgress
-			s := xray.ExtractSegment(t, messages[0])
+			s := xraytest.ExtractSegment(t, messages[0])
 			if !s.InProgress {
 				t.Fatal("expected first segment to be InProgress but it was not")
 			}
+			if expMsgs == 1 {
+				return
+			}
 
+			if len(messages) < 2 {
+				t.Fatalf("did not receive message %v", 2)
+			}
 			// second message
-			s = xray.ExtractSegment(t, messages[1])
+			s = xraytest.ExtractSegment(t, messages[1])
 			if s.Name != host {
 				t.Errorf("unexpected segment name: expected %q, got %q", host, s.Name)
 			}

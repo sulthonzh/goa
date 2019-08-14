@@ -322,29 +322,6 @@ func (e *HTTPEndpointExpr) Validate() error {
 		verr.Merge(er.Validate())
 	}
 
-	// Validate security definitions
-	for _, req := range e.MethodExpr.Requirements {
-		for _, sch := range req.Schemes {
-			var name, msg string
-			switch sch.Kind {
-			case APIKeyKind:
-				name = "security:apikey:" + sch.SchemeName
-				msg = "API key attribute (use APIKey)"
-			case JWTKind:
-				name = "security:token"
-				msg = "JWT token attribute (use Token)"
-			case OAuth2Kind:
-				name = "security:accesstoken"
-				msg = "access token attribute (use AccessToken)"
-			}
-			if name != "" {
-				if f := TaggedAttribute(e.MethodExpr.Payload, name); f == "" {
-					verr.Add(e, "Payload must define %s required by security scheme %q.", msg, sch.SchemeName)
-				}
-			}
-		}
-	}
-
 	// Validate definitions of params, headers and bodies against definition of payload
 	if isEmpty(e.MethodExpr.Payload) {
 		if e.MapQueryParams != nil {
@@ -621,7 +598,7 @@ func (e *HTTPEndpointExpr) validateParams() *eval.ValidationErrors {
 	})
 	if e.MethodExpr.Payload != nil {
 		switch e.MethodExpr.Payload.Type.(type) {
-		case *Object:
+		case *Object, UserType:
 			WalkMappedAttr(pparams, func(name, _ string, a *AttributeExpr) error {
 				if e.MethodExpr.Payload.Find(name) == nil {
 					verr.Add(e, "Path parameter %q not found in payload.", name)
@@ -630,7 +607,7 @@ func (e *HTTPEndpointExpr) validateParams() *eval.ValidationErrors {
 			})
 			WalkMappedAttr(qparams, func(name, _ string, a *AttributeExpr) error {
 				if e.MethodExpr.Payload.Find(name) == nil {
-					verr.Add(e, "Querys string parameter %q not found in payload.", name)
+					verr.Add(e, "Query string parameter %q not found in payload.", name)
 				}
 				return nil
 			})
@@ -674,7 +651,7 @@ func (e *HTTPEndpointExpr) validateHeaders() *eval.ValidationErrors {
 		return nil
 	})
 	switch e.MethodExpr.Payload.Type.(type) {
-	case *Object:
+	case *Object, UserType:
 		hasBasicAuth := TaggedAttribute(e.MethodExpr.Payload, "security:username") != ""
 		WalkMappedAttr(headers, func(name, elem string, a *AttributeExpr) error {
 			if e.MethodExpr.Payload.Find(name) == nil {
@@ -719,7 +696,7 @@ func (r *RouteExpr) Validate() *eval.ValidationErrors {
 			switch r.Endpoint.MethodExpr.Payload.Type.(type) {
 			case *Map:
 				verr.Add(r, "Route parameters are defined, but method payload is a map. Method payload must be a primitive or an object.")
-			case *Object:
+			case *Object, UserType:
 				for _, p := range rparams {
 					if r.Endpoint.MethodExpr.Payload.Find(p) == nil {
 						verr.Add(r, "Route param %q not found in method payload", p)

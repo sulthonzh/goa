@@ -711,7 +711,9 @@ var EmptyBodyResultMultipleViewsDSL = func() {
 
 var ExplicitBodyPrimitiveResultMultipleViewsDSL = func() {
 	var ResultType = ResultType("ResultTypeMultipleViews", func() {
-		Attribute("a", String)
+		Attribute("a", String, func() {
+			MinLength(5)
+		})
 		Attribute("b", String)
 		Attribute("c", String)
 		View("default", func() {
@@ -1192,6 +1194,41 @@ var WithHeadersBlockViewedResultDSL = func() {
 						Header("optional_but_required:Location")
 						Required("optional_but_required")
 					})
+				})
+			})
+		})
+	})
+}
+
+var ValidateErrorResponseTypeDSL = func() {
+	var AResult = ResultType("application/vnd.goa.aresult", func() {
+		TypeName("AResult")
+		Attributes(func() {
+			Attribute("required", Int)
+			Required("required")
+		})
+	})
+	var AError = Type("AError", func() {
+		Attribute("error", String)
+		Attribute("num_occur", Int, func() {
+			Minimum(1)
+		})
+		Required("error")
+	})
+	Service("ValidateErrorResponseType", func() {
+		Method("MethodA", func() {
+			Result(AResult)
+			Error("some_error", AError)
+			HTTP(func() {
+				GET("/")
+				Response(StatusOK, func() {
+					Headers(func() {
+						Header("required:X-Request-ID")
+					})
+				})
+				Response("some_error", StatusBadRequest, func() {
+					Header("error:X-Application-Error")
+					Header("num_occur:X-Occur")
 				})
 			})
 		})

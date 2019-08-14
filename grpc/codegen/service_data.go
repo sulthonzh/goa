@@ -1324,6 +1324,11 @@ func (s *{{ .VarName }}) {{ .RecvName }}() ({{ .RecvRef }}, error) {
 	vres := {{ if not .Endpoint.Method.ViewedResult.IsCollection }}&{{ end }}{{ .Endpoint.Method.ViewedResult.FullName }}{Projected: proj, View: {{ if .Endpoint.Method.ViewedResult.ViewName }}"{{ .Endpoint.Method.ViewedResult.ViewName }}"{{ else }}s.view{{ end }} }
 	return {{ .Endpoint.ServicePkgName }}.{{ .Endpoint.Method.ViewedResult.ResultInit.Name }}(vres), nil
 {{- else }}
+{{- if .RecvConvert.Validation }}
+	if err = {{ .RecvConvert.Validation.Name }}(v); err != nil {
+		return res, err
+	}
+{{- end }}
 	return {{ .RecvConvert.Init.Name }}({{ range .RecvConvert.Init.Args }}{{ .Name }}, {{ end }}), nil
 {{- end }}
 }
@@ -1334,8 +1339,13 @@ func (s *{{ .VarName }}) {{ .RecvName }}() ({{ .RecvRef }}, error) {
 // input: StreamData
 const streamCloseT = `
 func (s *{{ .VarName }}) Close() error {
+{{- if eq .Type "client" }}
+	{{ comment "Close the send direction of the stream" }}
+	return s.stream.CloseSend()
+{{- else }}
 	{{ comment "nothing to do here" }}
 	return nil
+{{- end }}
 }
 `
 
