@@ -63,6 +63,7 @@ func exampleCLI(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *codeg
 			{Path: "flag"},
 			{Path: "fmt"},
 			{Path: "google.golang.org/grpc"},
+			{Path: "google.golang.org/grpc/credentials/insecure"},
 			{Path: "os"},
 			{Path: "time"},
 			codegen.GoaImport(""),
@@ -78,7 +79,7 @@ func exampleCLI(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *codeg
 	{
 		sections = []*codegen.SectionTemplate{
 			codegen.Header("", "main", specs),
-			&codegen.SectionTemplate{Name: "do-grpc-cli", Source: grpcCLIDoT, Data: svrdata},
+			{Name: "do-grpc-cli", Source: grpcCLIDoT, Data: svrdata},
 		}
 	}
 
@@ -87,9 +88,9 @@ func exampleCLI(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *codeg
 
 const (
 	grpcCLIDoT = `func doGRPC(scheme, host string, timeout int, debug bool) (goa.Endpoint, interface{}, error) {
-	conn, err := grpc.Dial(host, grpc.WithInsecure())
+	conn, err := grpc.Dial(host, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-    fmt.Fprintln(os.Stderr, fmt.Sprintf("could not connect to gRPC server at %s: %v", host, err))
+    fmt.Fprintf(os.Stderr, "could not connect to gRPC server at %s: %v\n", host, err)
   }
 	return cli.ParseEndpoint(conn)
 }

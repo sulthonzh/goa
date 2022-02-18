@@ -48,7 +48,7 @@ func exampleServer(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *co
 	scope := codegen.NewNameScope()
 	for _, svc := range root.API.HTTP.Services {
 		sd := HTTPServices.Get(svc.Name())
-		svcName := codegen.SnakeCase(sd.Service.VarName)
+		svcName := sd.Service.PathName
 		specs = append(specs, &codegen.ImportSpec{
 			Path: path.Join(genpkg, "http", svcName, "server"),
 			Name: scope.Unique(sd.Service.PkgName + "svr"),
@@ -83,34 +83,34 @@ func exampleServer(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *co
 
 	sections := []*codegen.SectionTemplate{
 		codegen.Header("", "main", specs),
-		&codegen.SectionTemplate{
+		{
 			Name:   "server-http-start",
 			Source: httpSvrStartT,
 			Data: map[string]interface{}{
 				"Services": svcdata,
 			},
 		},
-		&codegen.SectionTemplate{Name: "server-http-logger", Source: httpSvrLoggerT},
-		&codegen.SectionTemplate{Name: "server-http-encoding", Source: httpSvrEncodingT},
-		&codegen.SectionTemplate{Name: "server-http-mux", Source: httpSvrMuxT},
-		&codegen.SectionTemplate{
+		{Name: "server-http-logger", Source: httpSvrLoggerT},
+		{Name: "server-http-encoding", Source: httpSvrEncodingT},
+		{Name: "server-http-mux", Source: httpSvrMuxT},
+		{
 			Name:   "server-http-init",
 			Source: httpSvrInitT,
 			Data: map[string]interface{}{
 				"Services": svcdata,
 				"APIPkg":   apiPkg,
 			},
-			FuncMap: map[string]interface{}{"needStream": needStream},
+			FuncMap: map[string]interface{}{"needStream": needStream, "hasWebSocket": hasWebSocket},
 		},
-		&codegen.SectionTemplate{Name: "server-http-middleware", Source: httpSvrMiddlewareT},
-		&codegen.SectionTemplate{
+		{Name: "server-http-middleware", Source: httpSvrMiddlewareT},
+		{
 			Name:   "server-http-end",
 			Source: httpSvrEndT,
 			Data: map[string]interface{}{
 				"Services": svcdata,
 			},
 		},
-		&codegen.SectionTemplate{Name: "server-http-errorhandler", Source: httpSvrErrorHandlerT},
+		{Name: "server-http-errorhandler", Source: httpSvrErrorHandlerT},
 	}
 
 	return &codegen.File{Path: fpath, SectionTemplates: sections, SkipExist: true}
@@ -129,13 +129,24 @@ func dummyMultipartFile(genpkg string, root *expr.RootExpr, svc *expr.HTTPServic
 
 		scope = codegen.NewNameScope()
 	)
+	// determine the unique API package name different from the service names
+	for _, svc := range root.Services {
+		s := HTTPServices.Get(svc.Name)
+		if s == nil {
+			panic("unknown http service, " + svc.Name) // bug
+		}
+		if s.Service == nil {
+			panic("unknown service, " + svc.Name) // bug
+		}
+		scope.Unique(s.Service.PkgName)
+	}
 	{
 		specs := []*codegen.ImportSpec{
 			{Path: "mime/multipart"},
 		}
 		data := HTTPServices.Get(svc.Name())
 		specs = append(specs, &codegen.ImportSpec{
-			Path: path.Join(genpkg, codegen.SnakeCase(data.Service.VarName)),
+			Path: path.Join(genpkg, data.Service.PathName),
 			Name: scope.Unique(data.Service.PkgName, "svc"),
 		})
 
@@ -206,7 +217,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL{{ range $.Services }}{{ if
 	// Provide the transport specific request decoder and response encoder.
 	// The goa http package has built-in support for JSON, XML and gob.
 	// Other encodings can be used by providing the corresponding functions,
-	// see goa.design/encoding.
+	// see goa.design/implement/encoding.
 	var (
 		dec = goahttp.RequestDecoder
 		enc = goahttp.ResponseEncoder
@@ -238,17 +249,27 @@ func handleHTTPServer(ctx context.Context, u *url.URL{{ range $.Services }}{{ if
 	{{- if needStream .Services }}
 		upgrader := &websocket.Upgrader{}
 	{{- end }}
-	{{- range .Services }}
+	{{- range $svc := .Services }}
 		{{-  if .Endpoints }}
-		{{ .Service.VarName }}Server = {{ .Service.PkgName }}svr.New({{ .Service.VarName }}Endpoints, mux, dec, enc, eh{{ if needStream $.Services }}, upgrader, nil{{ end }}{{ range .Endpoints }}{{ if .MultipartRequestDecoder }}, {{ $.APIPkg }}.{{ .MultipartRequestDecoder.FuncName }}{{ end }}{{ end }})
+		{{ .Service.VarName }}Server = {{ .Service.PkgName }}svr.New({{ .Service.VarName }}Endpoints, mux, dec, enc, eh, nil{{ if hasWebSocket $svc }}, upgrader, nil{{ end }}{{ range .Endpoints }}{{ if .MultipartRequestDecoder }}, {{ $.APIPkg }}.{{ .MultipartRequestDecoder.FuncName }}{{ end }}{{ end }}{{ range .FileServers }}, nil{{ end }})
 		{{-  else }}
-		{{ .Service.VarName }}Server = {{ .Service.PkgName }}svr.New(nil, mux, dec, enc, eh)
+		{{ .Service.VarName }}Server = {{ .Service.PkgName }}svr.New(nil, mux, dec, enc, eh, nil{{ range .FileServers }}, nil{{ end }})
 		{{-  end }}
+	{{- end }}
+	{{- if .Services }}
+		if debug {
+			servers := goahttp.Servers{
+				{{- range $svc := .Services }}
+				{{ .Service.VarName }}Server,
+				{{- end }}
+			}
+			servers.Use(httpmdlwr.Debug(mux, os.Stdout))
+		}
 	{{- end }}
 	}
 	// Configure the mux.
 	{{- range .Services }}
-		{{ .Service.PkgName }}svr.Mount(mux{{ if .Endpoints }}, {{ .Service.VarName }}Server{{ end }})
+		{{ .Service.PkgName }}svr.Mount(mux, {{ .Service.VarName }}Server)
 	{{- end }}
 `
 
@@ -257,9 +278,6 @@ func handleHTTPServer(ctx context.Context, u *url.URL{{ range $.Services }}{{ if
 	// here apply to all the service endpoints.
 	var handler http.Handler = mux
 	{
-		if debug {
-			handler = httpmdlwr.Debug(mux, os.Stdout)(handler)
-		}
 		handler = httpmdlwr.Log(adapter)(handler)
 		handler = httpmdlwr.RequestID()(handler)
 	}
@@ -291,10 +309,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL{{ range $.Services }}{{ if
 		logger.Printf("shutting down HTTP server at %q", u.Host)
 
 		{{ comment "Shutdown gracefully with a 30s timeout." }}
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
 	}()
 }
 `
@@ -306,7 +324,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL{{ range $.Services }}{{ if
 func errorHandler(logger *log.Logger) func(context.Context, http.ResponseWriter, error) {
 	return func(ctx context.Context, w http.ResponseWriter, err error) {
 		id := ctx.Value(middleware.RequestIDKey).(string)
-		w.Write([]byte("[" + id + "] encoding: " + err.Error()))
+		_, _ = w.Write([]byte("[" + id + "] encoding: " + err.Error()))
 		logger.Printf("[%s] ERROR: %s", id, err.Error())
 	}
 }

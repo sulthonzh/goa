@@ -67,7 +67,7 @@ func (s *NameScope) Unique(name string, suffix ...string) string {
 		}
 	}
 	for i := c; ; i++ {
-		ret := name + strconv.Itoa(i)
+		ret := name + strconv.Itoa(i+1)
 		if _, ok := s.counts[ret]; !ok {
 			s.counts[ret]++
 			return ret
@@ -98,7 +98,7 @@ func (s *NameScope) Name(name string) string {
 func (s *NameScope) GoTypeDef(att *expr.AttributeExpr, ptr, useDefault bool) string {
 	switch actual := att.Type.(type) {
 	case expr.Primitive:
-		if t, _ := getMetaTypeInfo(att); t != "" {
+		if t, _ := GetMetaType(att); t != "" {
 			return t
 		}
 		return GoNativeTypeName(actual)
@@ -172,6 +172,16 @@ func (s *NameScope) GoTypeRef(att *expr.AttributeExpr) string {
 	return goTypeRef(name, att.Type)
 }
 
+// GoTypeRefWithDefaults returns the Go code that refers to the Go type which
+// matches the given attribute type. The result of this function differs from
+// GoTypeRef when the attribute type is an object (note: not a user type) and
+// the reference is thus an inline struct definition. In this case accounting
+// for default values may cause child attributes to use non-pointer fields.
+func (s *NameScope) GoTypeRefWithDefaults(att *expr.AttributeExpr) string {
+	name := s.GoTypeNameWithDefaults(att)
+	return goTypeRef(name, att.Type)
+}
+
 // GoFullTypeRef returns the Go code that refers to the Go type which matches
 // the given attribute type defined in the given package if a user type.
 func (s *NameScope) GoFullTypeRef(att *expr.AttributeExpr, pkg string) string {
@@ -184,12 +194,24 @@ func (s *NameScope) GoTypeName(att *expr.AttributeExpr) string {
 	return s.GoFullTypeName(att, "")
 }
 
+// GoTypeNameWithDefaults returns the Go type name of the given attribute type.
+// The result of this function differs from GoTypeName when the attribute type
+// is an object (note: not a user type) and the name is thus an inline struct
+// definition. In this case accounting for default values may cause child
+// attributes to use non-pointer fields.
+func (s *NameScope) GoTypeNameWithDefaults(att *expr.AttributeExpr) string {
+	if _, ok := att.Type.(*expr.Object); ok {
+		return s.GoTypeDef(att, false, true)
+	}
+	return s.GoTypeName(att)
+}
+
 // GoFullTypeName returns the Go type name of the given data type qualified with
 // the given package name if applicable and if not the empty string.
 func (s *NameScope) GoFullTypeName(att *expr.AttributeExpr, pkg string) string {
 	switch actual := att.Type.(type) {
 	case expr.Primitive:
-		if t, _ := getMetaTypeInfo(att); t != "" {
+		if t, _ := GetMetaType(att); t != "" {
 			return t
 		}
 		return GoNativeTypeName(actual)

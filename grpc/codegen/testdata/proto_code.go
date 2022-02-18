@@ -3,9 +3,9 @@ package testdata
 const UnaryRPCsProtoCode = `
 syntax = "proto3";
 
-package service_unaryrp_cs;
+package service_unary_rp_cs;
 
-option go_package = "service_unaryrp_cspb";
+option go_package = "/service_unary_rp_cspb";
 
 // Service is the ServiceUnaryRPCs service interface.
 service ServiceUnaryRPCs {
@@ -39,9 +39,9 @@ message MethodUnaryRPCBResponse {
 const UnaryRPCNoPayloadProtoCode = `
 syntax = "proto3";
 
-package service_unaryrpc_no_payload;
+package service_unary_rpc_no_payload;
 
-option go_package = "service_unaryrpc_no_payloadpb";
+option go_package = "/service_unary_rpc_no_payloadpb";
 
 // Service is the ServiceUnaryRPCNoPayload service interface.
 service ServiceUnaryRPCNoPayload {
@@ -60,9 +60,9 @@ message MethodUnaryRPCNoPayloadResponse {
 const UnaryRPCNoResultProtoCode = `
 syntax = "proto3";
 
-package service_unaryrpc_no_result;
+package service_unary_rpc_no_result;
 
-option go_package = "service_unaryrpc_no_resultpb";
+option go_package = "/service_unary_rpc_no_resultpb";
 
 // Service is the ServiceUnaryRPCNoResult service interface.
 service ServiceUnaryRPCNoResult {
@@ -81,9 +81,9 @@ message MethodUnaryRPCNoResultResponse {
 const ServerStreamingRPCProtoCode = `
 syntax = "proto3";
 
-package service_server_streamingrpc;
+package service_server_streaming_rpc;
 
-option go_package = "service_server_streamingrpcpb";
+option go_package = "/service_server_streaming_rpcpb";
 
 // Service is the ServiceServerStreamingRPC service interface.
 service ServiceServerStreamingRPC {
@@ -103,9 +103,9 @@ message MethodServerStreamingRPCResponse {
 const ClientStreamingRPCProtoCode = `
 syntax = "proto3";
 
-package service_client_streamingrpc;
+package service_client_streaming_rpc;
 
-option go_package = "service_client_streamingrpcpb";
+option go_package = "/service_client_streaming_rpcpb";
 
 // Service is the ServiceClientStreamingRPC service interface.
 service ServiceClientStreamingRPC {
@@ -125,9 +125,9 @@ message MethodClientStreamingRPCResponse {
 const BidirectionalStreamingRPCProtoCode = `
 syntax = "proto3";
 
-package service_bidirectional_streamingrpc;
+package service_bidirectional_streaming_rpc;
 
-option go_package = "service_bidirectional_streamingrpcpb";
+option go_package = "/service_bidirectional_streaming_rpcpb";
 
 // Service is the ServiceBidirectionalStreamingRPC service interface.
 service ServiceBidirectionalStreamingRPC {
@@ -150,7 +150,7 @@ syntax = "proto3";
 
 package my_name_conflicts;
 
-option go_package = "my_name_conflictspb";
+option go_package = "/my_name_conflictspb";
 
 // Service is the MyNameConflicts service interface.
 service MyNameConflicts {
@@ -159,10 +159,10 @@ service MyNameConflicts {
 }
 
 message MyNameConflictsMethodRequest {
-	MyNameConflicts1 conflict = 1;
+	MyNameConflicts2 conflict = 1;
 }
 
-message MyNameConflicts1 {
+message MyNameConflicts2 {
 	bool boolean_field = 1;
 }
 
@@ -186,6 +186,18 @@ message MethodMessageUserTypeWithPrimitivesResponse {
 	double float64_field = 2;
 	string string_field = 3;
 	bytes bytes_field = 4;
+}
+`
+
+const MessageUserTypeWithAliasMessageCode = `
+message MethodMessageUserTypeWithAliasRequest {
+	sint32 int_alias_field = 1;
+	sint32 optional_int_alias_field = 2;
+}
+
+message MethodMessageUserTypeWithAliasResponse {
+	sint32 int_alias_field = 1;
+	sint32 optional_int_alias_field = 2;
 }
 `
 
@@ -249,8 +261,8 @@ message RT {
 const MessageArrayCode = `
 message MethodMessageArrayRequest {
 	repeated uint32 array_of_primitives = 1;
-	repeated ArrayOfBytes twod_array = 2;
-	repeated ArrayOfArrayOfBytes threed_array = 3;
+	repeated ArrayOfBytes two_d_array = 2;
+	repeated ArrayOfArrayOfBytes three_d_array = 3;
 	repeated MapOfStringDouble array_of_maps = 4;
 }
 
@@ -272,8 +284,8 @@ message MethodMessageArrayResponse {
 
 message UT {
 	repeated uint32 array_of_primitives = 1;
-	repeated ArrayOfBytes twod_array = 2;
-	repeated ArrayOfArrayOfBytes threed_array = 3;
+	repeated ArrayOfBytes two_d_array = 2;
+	repeated ArrayOfArrayOfBytes three_d_array = 3;
 	repeated MapOfStringDouble array_of_maps = 4;
 }
 `
@@ -285,7 +297,7 @@ message MethodMessageMapRequest {
 
 message UT {
 	map<uint32, bool> map_of_primitives = 1;
-	map<sint32, ArrayOfUTLevel1> map_of_primitiveut_array = 2;
+	map<sint32, ArrayOfUTLevel1> map_of_primitive_ut_array = 2;
 }
 
 message ArrayOfUTLevel1 {
@@ -302,7 +314,7 @@ message MapOfSint32Uint32 {
 
 message MethodMessageMapResponse {
 	map<uint32, bool> map_of_primitives = 1;
-	map<sint32, ArrayOfUTLevel1> map_of_primitiveut_array = 2;
+	map<sint32, ArrayOfUTLevel1> map_of_primitive_ut_array = 2;
 }
 `
 
@@ -347,7 +359,7 @@ syntax = "proto3";
 
 package method_with_reserved_name;
 
-option go_package = "method_with_reserved_namepb";
+option go_package = "/method_with_reserved_namepb";
 
 // Service is the MethodWithReservedName service interface.
 service MethodWithReservedName {
@@ -367,7 +379,7 @@ syntax = "proto3";
 
 package multiple_methods_same_result_collection;
 
-option go_package = "multiple_methods_same_result_collectionpb";
+option go_package = "/multiple_methods_same_result_collectionpb";
 
 // Service is the MultipleMethodsSameResultCollection service interface.
 service MultipleMethodsSameResultCollection {
@@ -389,5 +401,45 @@ message ResultT {
 }
 
 message MethodBRequest {
+}
+`
+
+const MethodWithAcronymProtoCode = `
+syntax = "proto3";
+
+package method_with_acronym;
+
+option go_package = "/method_with_acronympb";
+
+// Service is the MethodWithAcronym service interface.
+service MethodWithAcronym {
+	// MethodJWT implements method_jwt.
+	rpc MethodJWT (MethodJWTRequest) returns (MethodJWTResponse);
+}
+
+message MethodJWTRequest {
+}
+
+message MethodJWTResponse {
+}
+`
+
+const ServiceWithPackageCode = `
+syntax = "proto3";
+
+package custom;
+
+option go_package = "/custompb";
+
+// Service is the ServiceWithPackageName service interface.
+service ServiceWithPackageName {
+	// Method implements method.
+	rpc Method (MethodRequest) returns (MethodResponse);
+}
+
+message MethodRequest {
+}
+
+message MethodResponse {
 }
 `

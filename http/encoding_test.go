@@ -13,6 +13,43 @@ var (
 	testString = "test string"
 )
 
+func TestRequestEncoder(t *testing.T) {
+	const (
+		ct      = "Content-Type"
+		ctJSON  = "application/json"
+		ctOther = "<other>"
+		wantT   = "*json.Encoder"
+	)
+	cases := []struct {
+		name      string
+		requestCT string
+		wantCT    string
+	}{
+		{"no ct", "", ctJSON},
+		{"json ct", ctJSON, ctJSON},
+		{"other ct", ctOther, ctOther},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := &http.Request{
+				Header: http.Header{},
+			}
+			if c.requestCT != "" {
+				r.Header.Set(ct, c.requestCT)
+			}
+
+			encoder := RequestEncoder(r)
+
+			if gotT := fmt.Sprintf("%T", encoder); gotT != wantT {
+				t.Errorf("got encoder type %s, want %s", gotT, wantT)
+			}
+			if gotCT := r.Header.Get(ct); gotCT != c.wantCT {
+				t.Errorf("got Content-Type %q, want %q", gotCT, c.wantCT)
+			}
+		})
+	}
+}
+
 func TestResponseEncoder(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -36,6 +73,21 @@ func TestResponseEncoder(t *testing.T) {
 		{"ct +html", "+html", "application/gob", "*http.textEncoder"},
 		{"ct plain", "text/plain", "application/gob", "*http.textEncoder"},
 		{"ct +txt", "+txt", "application/gob", "*http.textEncoder"},
+		{"no ct, at json with params", "", "application/json; charset=utf-8", "*json.Encoder"},
+		{"no ct, at xml with params", "", "application/xml; charset=utf-8", "*xml.Encoder"},
+		{"no ct, at gob with params", "", "application/gob; charset=utf-8", "*gob.Encoder"},
+		{"no ct, at html with params", "", "text/html; charset=utf-8", "*http.textEncoder"},
+		{"no ct, at plain with params", "", "text/plain; charset=utf-8", "*http.textEncoder"},
+		{"ct json with params", "application/json; charset=utf-8", "application/gob", "*json.Encoder"},
+		{"ct +json with params", "+json; charset=utf-8", "application/gob", "*json.Encoder"},
+		{"ct xml with params", "application/xml; charset=utf-8", "application/gob", "*xml.Encoder"},
+		{"ct +xml with params", "+xml; charset=utf-8", "application/gob", "*xml.Encoder"},
+		{"ct gob with params", "application/gob; charset=utf-8", "application/xml", "*gob.Encoder"},
+		{"ct +gob with params", "+gob; charset=utf-8", "application/xml", "*gob.Encoder"},
+		{"ct html with params", "text/html; charset=utf-8", "application/gob", "*http.textEncoder"},
+		{"ct +html with params", "+html; charset=utf-8", "application/gob", "*http.textEncoder"},
+		{"ct plain with params", "text/plain; charset=utf-8", "application/gob", "*http.textEncoder"},
+		{"ct +txt with params", "+txt; charset=utf-8", "application/gob", "*http.textEncoder"},
 	}
 
 	for _, c := range cases {
@@ -67,6 +119,16 @@ func TestResponseDecoder(t *testing.T) {
 		{"+html", "*http.textDecoder"},
 		{"text/plain", "*http.textDecoder"},
 		{"+txt", "*http.textDecoder"},
+		{"application/json; charset=utf-8", "*json.Decoder"},
+		{"+json; charset=utf-8", "*json.Decoder"},
+		{"application/xml; charset=utf-8", "*xml.Decoder"},
+		{"+xml; charset=utf-8", "*xml.Decoder"},
+		{"application/gob; charset=utf-8", "*gob.Decoder"},
+		{"+gob; charset=utf-8", "*gob.Decoder"},
+		{"text/html; charset=utf-8", "*http.textDecoder"},
+		{"+html; charset=utf-8", "*http.textDecoder"},
+		{"text/plain; charset=utf-8", "*http.textDecoder"},
+		{"+txt; charset=utf-8", "*http.textDecoder"},
 	}
 
 	for _, c := range cases {

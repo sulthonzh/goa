@@ -19,6 +19,10 @@ func TestServerTypes(t *testing.T) {
 		{"mixed-payload-attrs", testdata.MixedPayloadInBodyDSL, MixedPayloadInBodyServerTypesFile},
 		{"multiple-methods", testdata.MultipleMethodsDSL, MultipleMethodsServerTypesFile},
 		{"payload-extend-validate", testdata.PayloadExtendedValidateDSL, PayloadExtendedValidateServerTypesFile},
+		{"result-type-validate", testdata.ResultTypeValidateDSL, ResultTypeValidateServerTypesFile},
+		{"with-result-collection", testdata.ResultWithResultCollectionDSL, ResultWithResultCollectionServerTypesFile},
+		{"with-result-view", testdata.ResultWithResultViewDSL, ResultWithResultViewServerTypesFile},
+		{"empty-error-response-body", testdata.EmptyErrorResponseBodyDSL, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
@@ -76,6 +80,7 @@ func NewMethodAAPayload(body *MethodARequestBody) *servicemixedpayloadinbody.APa
 	if body.DupObj != nil {
 		v.DupObj = unmarshalBPayloadRequestBodyToServicemixedpayloadinbodyBPayload(body.DupObj)
 	}
+
 	return v
 }
 
@@ -135,6 +140,7 @@ func NewMethodAAPayload(body *MethodARequestBody) *servicemultiplemethods.APaylo
 	v := &servicemultiplemethods.APayload{
 		A: body.A,
 	}
+
 	return v
 }
 
@@ -146,6 +152,7 @@ func NewMethodBPayloadType(body *MethodBRequestBody) *servicemultiplemethods.Pay
 		B: body.B,
 	}
 	v.C = unmarshalAPayloadRequestBodyToServicemultiplemethodsAPayload(body.C)
+
 	return v
 }
 
@@ -205,6 +212,7 @@ func NewMethodQueryStringExtendedValidatePayloadPayload(body *MethodQueryStringE
 	}
 	v.Q = q
 	v.H = h
+
 	return v
 }
 
@@ -215,5 +223,82 @@ func ValidateMethodQueryStringExtendedValidatePayloadRequestBody(body *MethodQue
 		err = goa.MergeErrors(err, goa.MissingFieldError("body", "body"))
 	}
 	return
+}
+`
+
+const ResultTypeValidateServerTypesFile = `// MethodResultTypeValidateResponseBody is the type of the
+// "ServiceResultTypeValidate" service "MethodResultTypeValidate" endpoint HTTP
+// response body.
+type MethodResultTypeValidateResponseBody struct {
+	A *string ` + "`" + `form:"a,omitempty" json:"a,omitempty" xml:"a,omitempty"` + "`" + `
+}
+
+// NewMethodResultTypeValidateResponseBody builds the HTTP response body from
+// the result of the "MethodResultTypeValidate" endpoint of the
+// "ServiceResultTypeValidate" service.
+func NewMethodResultTypeValidateResponseBody(res *serviceresulttypevalidate.ResultType) *MethodResultTypeValidateResponseBody {
+	body := &MethodResultTypeValidateResponseBody{
+		A: res.A,
+	}
+	return body
+}
+`
+
+const ResultWithResultCollectionServerTypesFile = `// MethodResultWithResultCollectionResponseBody is the type of the
+// "ServiceResultWithResultCollection" service
+// "MethodResultWithResultCollection" endpoint HTTP response body.
+type MethodResultWithResultCollectionResponseBody struct {
+	A *ResulttypeResponseBody ` + "`" + `form:"a,omitempty" json:"a,omitempty" xml:"a,omitempty"` + "`" + `
+}
+
+// ResulttypeResponseBody is used to define fields on response body types.
+type ResulttypeResponseBody struct {
+	X RtCollectionResponseBody ` + "`" + `form:"x,omitempty" json:"x,omitempty" xml:"x,omitempty"` + "`" + `
+}
+
+// RtCollectionResponseBody is used to define fields on response body types.
+type RtCollectionResponseBody []*RtResponseBody
+
+// RtResponseBody is used to define fields on response body types.
+type RtResponseBody struct {
+	X *string ` + "`" + `form:"x,omitempty" json:"x,omitempty" xml:"x,omitempty"` + "`" + `
+}
+
+// NewMethodResultWithResultCollectionResponseBody builds the HTTP response
+// body from the result of the "MethodResultWithResultCollection" endpoint of
+// the "ServiceResultWithResultCollection" service.
+func NewMethodResultWithResultCollectionResponseBody(res *serviceresultwithresultcollection.MethodResultWithResultCollectionResult) *MethodResultWithResultCollectionResponseBody {
+	body := &MethodResultWithResultCollectionResponseBody{}
+	if res.A != nil {
+		body.A = marshalServiceresultwithresultcollectionResulttypeToResulttypeResponseBody(res.A)
+	}
+	return body
+}
+`
+
+const ResultWithResultViewServerTypesFile = `// MethodResultWithResultViewResponseBodyFull is the type of the
+// "ServiceResultWithResultView" service "MethodResultWithResultView" endpoint
+// HTTP response body.
+type MethodResultWithResultViewResponseBodyFull struct {
+	Name *string         ` + "`" + `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"` + "`" + `
+	Rt   *RtResponseBody ` + "`" + `form:"rt,omitempty" json:"rt,omitempty" xml:"rt,omitempty"` + "`" + `
+}
+
+// RtResponseBody is used to define fields on response body types.
+type RtResponseBody struct {
+	X *string ` + "`" + `form:"x,omitempty" json:"x,omitempty" xml:"x,omitempty"` + "`" + `
+}
+
+// NewMethodResultWithResultViewResponseBodyFull builds the HTTP response body
+// from the result of the "MethodResultWithResultView" endpoint of the
+// "ServiceResultWithResultView" service.
+func NewMethodResultWithResultViewResponseBodyFull(res *serviceresultwithresultviewviews.ResulttypeView) *MethodResultWithResultViewResponseBodyFull {
+	body := &MethodResultWithResultViewResponseBodyFull{
+		Name: res.Name,
+	}
+	if res.Rt != nil {
+		body.Rt = marshalServiceresultwithresultviewviewsRtViewToRtResponseBody(res.Rt)
+	}
+	return body
 }
 `

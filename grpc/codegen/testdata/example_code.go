@@ -40,6 +40,10 @@ func handleGRPCServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 		}
 	}
 
+	// Register the server reflection service on the server.
+	// See https://grpc.github.io/grpc/core/md_doc_server-reflection.html.
+	reflection.Register(srv)
+
 	(*wg).Add(1)
 	go func() {
 		defer (*wg).Done()
@@ -100,6 +104,10 @@ func handleGRPCServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 			logger.Printf("serving gRPC method %s", svc+"/"+m.Name)
 		}
 	}
+
+	// Register the server reflection service on the server.
+	// See https://grpc.github.io/grpc/core/md_doc_server-reflection.html.
+	reflection.Register(srv)
 
 	(*wg).Add(1)
 	go func() {
@@ -165,6 +173,10 @@ func handleGRPCServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 		}
 	}
 
+	// Register the server reflection service on the server.
+	// See https://grpc.github.io/grpc/core/md_doc_server-reflection.html.
+	reflection.Register(srv)
+
 	(*wg).Add(1)
 	go func() {
 		defer (*wg).Done()
@@ -188,11 +200,12 @@ func handleGRPCServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 
 const ExampleCLIImport = `import (
 	"fmt"
-	cli "grpc/cli/testapi"
+	cli "grpc/cli/test_api"
 	"os"
 
 	goa "goa.design/goa/v3/pkg"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 `
 
@@ -203,16 +216,18 @@ const ExampleSingleHostCLIImport = `import (
 
 	goa "goa.design/goa/v3/pkg"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 `
 
 const ExamplePkgPathCLIImport = `import (
 	"fmt"
-	cli "my/pkg/path/grpc/cli/testapi"
+	cli "my/pkg/path/grpc/cli/test_api"
 	"os"
 
 	goa "goa.design/goa/v3/pkg"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 `
 
@@ -223,13 +238,14 @@ const ExampleSingleHostPkgPathCLIImport = `import (
 
 	goa "goa.design/goa/v3/pkg"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 `
 
 const ExampleCLICode = `func doGRPC(scheme, host string, timeout int, debug bool) (goa.Endpoint, interface{}, error) {
-	conn, err := grpc.Dial(host, grpc.WithInsecure())
+	conn, err := grpc.Dial(host, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		fmt.Fprintln(os.Stderr, fmt.Sprintf("could not connect to gRPC server at %s: %v", host, err))
+		fmt.Fprintf(os.Stderr, "could not connect to gRPC server at %s: %v\n", host, err)
 	}
 	return cli.ParseEndpoint(conn)
 }

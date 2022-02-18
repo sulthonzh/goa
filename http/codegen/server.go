@@ -11,29 +11,37 @@ import (
 	"goa.design/goa/v3/expr"
 )
 
-// ServerFiles returns all the server HTTP transport files.
+// ServerFiles returns the generated HTTP server files.
 func ServerFiles(genpkg string, root *expr.RootExpr) []*codegen.File {
-	fw := make([]*codegen.File, 2*len(root.API.HTTP.Services))
-	for i, svc := range root.API.HTTP.Services {
-		fw[i] = serverFile(genpkg, svc)
+	var files []*codegen.File
+	for _, svc := range root.API.HTTP.Services {
+		files = append(files, serverFile(genpkg, svc))
+		if f := websocketServerFile(genpkg, svc); f != nil {
+			files = append(files, f)
+		}
 	}
-	for i, r := range root.API.HTTP.Services {
-		fw[i+len(root.API.HTTP.Services)] = serverEncodeDecode(genpkg, r)
+	for _, svc := range root.API.HTTP.Services {
+		if f := serverEncodeDecodeFile(genpkg, svc); f != nil {
+			files = append(files, f)
+		}
 	}
-	return fw
+	return files
 }
 
 // server returns the file implementing the HTTP server.
 func serverFile(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File {
 	data := HTTPServices.Get(svc.Name())
-	svcName := codegen.SnakeCase(data.Service.VarName)
+	svcName := data.Service.PathName
 	path := filepath.Join(codegen.Gendir, "http", svcName, "server", "server.go")
 	title := fmt.Sprintf("%s HTTP server", svc.Name())
 	funcs := map[string]interface{}{
 		"join":                    func(ss []string, s string) string { return strings.Join(ss, s) },
-		"streamingEndpointExists": streamingEndpointExists,
-		"upgradeParams":           upgradeParams,
+		"hasWebSocket":            hasWebSocket,
+		"isWebSocketEndpoint":     isWebSocketEndpoint,
 		"viewedServerBody":        viewedServerBody,
+		"mustDecodeRequest":       mustDecodeRequest,
+		"addLeadingSlash":         addLeadingSlash,
+		"removeTrailingIndexHTML": removeTrailingIndexHTML,
 	}
 	sections := []*codegen.SectionTemplate{
 		codegen.Header(title, "server", []*codegen.ImportSpec{
@@ -44,8 +52,6 @@ func serverFile(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File {
 			{Path: "net/http"},
 			{Path: "path"},
 			{Path: "strings"},
-			{Path: "sync"},
-			{Path: "time"},
 			{Path: "github.com/gorilla/websocket"},
 			codegen.GoaImport(""),
 			codegen.GoaNamedImport("http", "goahttp"),
@@ -57,17 +63,6 @@ func serverFile(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File {
 	sections = append(sections, &codegen.SectionTemplate{Name: "server-struct", Source: serverStructT, Data: data})
 	sections = append(sections, &codegen.SectionTemplate{Name: "server-mountpoint", Source: mountPointStructT, Data: data})
 
-	// public types
-	if streamingEndpointExists(data) {
-		sections = append(sections, &codegen.SectionTemplate{
-			Name:   "server-stream-conn-configurer-struct",
-			Source: streamConnConfigurerStructT,
-			Data:   data,
-			FuncMap: map[string]interface{}{
-				"isStreamingEndpoint": isStreamingEndpoint,
-			},
-		})
-	}
 	for _, e := range data.Endpoints {
 		if e.MultipartRequestDecoder != nil {
 			sections = append(sections, &codegen.SectionTemplate{
@@ -78,65 +73,27 @@ func serverFile(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File {
 		}
 	}
 
-	// private types
-	for _, e := range data.Endpoints {
-		if e.ServerStream != nil {
-			sections = append(sections, &codegen.SectionTemplate{
-				Name:   "server-stream-struct-type",
-				Source: streamStructTypeT,
-				Data:   e.ServerStream,
-			})
-		}
-	}
-
 	sections = append(sections, &codegen.SectionTemplate{Name: "server-init", Source: serverInitT, Data: data, FuncMap: funcs})
-	if streamingEndpointExists(data) {
-		sections = append(sections, &codegen.SectionTemplate{
-			Name:   "server-stream-conn-configurer-struct-init",
-			Source: streamConnConfigurerStructInitT,
-			Data:   data,
-			FuncMap: map[string]interface{}{
-				"isStreamingEndpoint": isStreamingEndpoint,
-			},
-		})
-	}
 	sections = append(sections, &codegen.SectionTemplate{Name: "server-service", Source: serverServiceT, Data: data})
 	sections = append(sections, &codegen.SectionTemplate{Name: "server-use", Source: serverUseT, Data: data})
-	sections = append(sections, &codegen.SectionTemplate{Name: "server-mount", Source: serverMountT, Data: data})
+	sections = append(sections, &codegen.SectionTemplate{Name: "server-mount", Source: serverMountT, Data: data, FuncMap: funcs})
 
 	for _, e := range data.Endpoints {
 		sections = append(sections, &codegen.SectionTemplate{Name: "server-handler", Source: serverHandlerT, Data: e})
-		sections = append(sections, &codegen.SectionTemplate{Name: "server-handler-init", Source: serverHandlerInitT, Data: e})
+		sections = append(sections, &codegen.SectionTemplate{Name: "server-handler-init", Source: serverHandlerInitT, FuncMap: funcs, Data: e})
 	}
 	for _, s := range data.FileServers {
 		sections = append(sections, &codegen.SectionTemplate{Name: "server-files", Source: fileServerT, FuncMap: funcs, Data: s})
-	}
-	for _, e := range data.Endpoints {
-		if e.ServerStream != nil {
-			if e.ServerStream.SendTypeRef != "" {
-				sections = append(sections, &codegen.SectionTemplate{Name: "server-stream-send", Source: streamSendT, Data: e.ServerStream, FuncMap: funcs})
-			}
-			switch e.ServerStream.Kind {
-			case expr.ClientStreamKind, expr.BidirectionalStreamKind:
-				sections = append(sections, &codegen.SectionTemplate{Name: "server-stream-recv", Source: streamRecvT, Data: e.ServerStream, FuncMap: funcs})
-			}
-			if e.ServerStream.MustClose {
-				sections = append(sections, &codegen.SectionTemplate{Name: "server-stream-close", Source: streamCloseT, Data: e.ServerStream, FuncMap: funcs})
-			}
-			if e.Method.ViewedResult != nil && e.Method.ViewedResult.ViewName == "" {
-				sections = append(sections, &codegen.SectionTemplate{Name: "server-stream-set-view", Source: streamSetViewT, Data: e.ServerStream})
-			}
-		}
 	}
 
 	return &codegen.File{Path: path, SectionTemplates: sections}
 }
 
-// serverEncodeDecode returns the file defining the HTTP server encoding and
+// serverEncodeDecodeFile returns the file defining the HTTP server encoding and
 // decoding logic.
-func serverEncodeDecode(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File {
+func serverEncodeDecodeFile(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File {
 	data := HTTPServices.Get(svc.Name())
-	svcName := codegen.SnakeCase(data.Service.VarName)
+	svcName := data.Service.PathName
 	path := filepath.Join(codegen.Gendir, "http", svcName, "server", "encode_decode.go")
 	title := fmt.Sprintf("%s HTTP server encoders and decoders", svc.Name())
 	sections := []*codegen.SectionTemplate{
@@ -158,7 +115,7 @@ func serverEncodeDecode(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File 
 	}
 
 	for _, e := range data.Endpoints {
-		if e.ServerStream == nil {
+		if e.Redirect == nil && !isWebSocketEndpoint(e) {
 			sections = append(sections, &codegen.SectionTemplate{
 				Name:    "response-encoder",
 				FuncMap: transTmplFuncs(svc),
@@ -166,7 +123,7 @@ func serverEncodeDecode(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File 
 				Data:    e,
 			})
 		}
-		if e.Payload.Ref != "" {
+		if mustDecodeRequest(e) {
 			fm := transTmplFuncs(svc)
 			fm["mapQueryDecodeData"] = mapQueryDecodeData
 			sections = append(sections, &codegen.SectionTemplate{
@@ -186,7 +143,6 @@ func serverEncodeDecode(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File 
 				Data:    e.MultipartRequestDecoder,
 			})
 		}
-
 		if len(e.Errors) > 0 {
 			sections = append(sections, &codegen.SectionTemplate{
 				Name:    "error-encoder",
@@ -204,6 +160,12 @@ func serverEncodeDecode(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File 
 		})
 	}
 
+	// If all endpoints use skip encoding and decoding of both payloads and
+	// results and define no error then this file is irrelevant.
+	if len(sections) == 1 {
+		return nil
+	}
+
 	return &codegen.File{Path: path, SectionTemplates: sections}
 }
 
@@ -212,11 +174,20 @@ func transTmplFuncs(s *expr.HTTPServiceExpr) map[string]interface{} {
 		"goTypeRef": func(dt expr.DataType) string {
 			return service.Services.Get(s.Name()).Scope.GoTypeRef(&expr.AttributeExpr{Type: dt})
 		},
+		"isAliased": func(dt expr.DataType) bool {
+			_, ok := dt.(expr.UserType)
+			return ok
+		},
 		"conversionData":       conversionData,
 		"headerConversionData": headerConversionData,
 		"printValue":           printValue,
 		"viewedServerBody":     viewedServerBody,
 	}
+}
+
+// mustDecodeRequest returns true if the Payload type is not empty.
+func mustDecodeRequest(e *EndpointData) bool {
+	return e.Payload.Ref != ""
 }
 
 // conversionData creates a template context suitable for executing the
@@ -269,11 +240,25 @@ func viewedServerBody(sbd []*TypeData, view string) *TypeData {
 	panic("view not found in server body types: " + view)
 }
 
+func addLeadingSlash(s string) string {
+	if strings.HasPrefix(s, "/") {
+		return s
+	}
+	return "/" + s
+}
+
+func removeTrailingIndexHTML(s string) string {
+	if strings.HasSuffix(s, "/index.html") {
+		return strings.TrimSuffix(s, "index.html")
+	}
+	return s
+}
+
 func mapQueryDecodeData(dt expr.DataType, varName string, inc int) map[string]interface{} {
 	return map[string]interface{}{
 		"Type":      dt,
 		"VarName":   varName,
-		"Loop":      string(97 + inc),
+		"Loop":      string(rune(97 + inc)),
 		"Increment": inc + 1,
 		"Depth":     codegen.MapDepth(expr.AsMap(dt)),
 	}
@@ -285,6 +270,9 @@ type {{ .ServerStruct }} struct {
 	Mounts []*{{ .MountPointStruct }}
 	{{- range .Endpoints }}
 	{{ .Method.VarName }} http.Handler
+	{{- end }}
+	{{- range .FileServers }}
+	{{ .VarName }} http.Handler
 	{{- end }}
 }
 
@@ -308,28 +296,37 @@ type {{ .MountPointStruct }} struct {
 `
 
 // input: ServiceData
-const serverInitT = `{{ printf "%s instantiates HTTP handlers for all the %s service endpoints." .ServerInit .Service.Name | comment }}
+const serverInitT = `{{ printf "%s instantiates HTTP handlers for all the %s service endpoints using the provided encoder and decoder. The handlers are mounted on the given mux using the HTTP verb and path defined in the design. errhandler is called whenever a response fails to be encoded. formatter is used to format errors returned by the service methods prior to encoding. Both errhandler and formatter are optional and can be nil." .ServerInit .Service.Name | comment }}
 func {{ .ServerInit }}(
 	e *{{ .Service.PkgName }}.Endpoints,
 	mux goahttp.Muxer,
-	dec func(*http.Request) goahttp.Decoder,
-	enc func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	eh func(context.Context, http.ResponseWriter, error),
-	{{- if streamingEndpointExists . }}
-	up goahttp.Upgrader,
-	cfn *ConnConfigurer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(err error) goahttp.Statuser,
+	{{- if hasWebSocket . }}
+	upgrader goahttp.Upgrader,
+	configurer *ConnConfigurer,
 	{{- end }}
 	{{- range .Endpoints }}
 		{{- if .MultipartRequestDecoder }}
 	{{ .MultipartRequestDecoder.VarName }} {{ .MultipartRequestDecoder.FuncName }},
 		{{- end }}
 	{{- end }}
+	{{- range .FileServers }}
+	{{ .ArgName }} http.FileSystem,
+	{{- end }}
 ) *{{ .ServerStruct }} {
-{{- if streamingEndpointExists . }}
-	if cfn == nil {
-		cfn = &ConnConfigurer{}
+{{- if hasWebSocket . }}
+	if configurer == nil {
+		configurer = &ConnConfigurer{}
 	}
 {{- end }}
+	{{- range .FileServers }}
+	if {{ .ArgName }} == nil {
+		{{ .ArgName }} = http.Dir(".")
+	}
+	{{- end }}
 	return &{{ .ServerStruct }}{
 		Mounts: []*{{ .MountPointStruct }}{
 			{{- range $e := .Endpoints }}
@@ -345,7 +342,10 @@ func {{ .ServerInit }}(
 			{{- end }}
 		},
 		{{- range .Endpoints }}
-		{{ .Method.VarName }}: {{ .HandlerInit }}(e.{{ .Method.VarName }}, mux, {{ if .MultipartRequestDecoder }}{{ .MultipartRequestDecoder.InitName }}(mux, {{ .MultipartRequestDecoder.VarName }}){{ else }}dec{{ end }}, enc, eh{{ if .ServerStream }}, up, cfn.{{ .Method.VarName }}Fn{{ end }}),
+		{{ .Method.VarName }}: {{ .HandlerInit }}(e.{{ .Method.VarName }}, mux, {{ if .MultipartRequestDecoder }}{{ .MultipartRequestDecoder.InitName }}(mux, {{ .MultipartRequestDecoder.VarName }}){{ else }}decoder{{ end }}, encoder, errhandler, formatter{{ if isWebSocketEndpoint . }}, upgrader, configurer.{{ .Method.VarName }}Fn{{ end }}),
+		{{- end }}
+		{{- range .FileServers }}
+		{{ .VarName }}: http.FileServer({{ .ArgName }}),
 		{{- end }}
 	}
 }
@@ -358,7 +358,7 @@ func (s *{{ .ServerStruct }}) {{ .ServerService }}() string { return "{{ .Servic
 
 // input: ServiceData
 const serverUseT = `{{ printf "Use wraps the server handlers with the given middleware." | comment }}
-func (s *{{ .ServerStruct }}) Use(m func(http.Handler) http.Handler) { 
+func (s *{{ .ServerStruct }}) Use(m func(http.Handler) http.Handler) {
 {{- range .Endpoints }}
 	s.{{ .Method.VarName }} = m(s.{{ .Method.VarName }})
 {{- end }}
@@ -367,28 +367,28 @@ func (s *{{ .ServerStruct }}) Use(m func(http.Handler) http.Handler) {
 
 // input: ServiceData
 const serverMountT = `{{ printf "%s configures the mux to serve the %s endpoints." .MountServer .Service.Name | comment }}
-func {{ .MountServer }}(mux goahttp.Muxer{{ if .Endpoints }}, h *{{ .ServerStruct }}{{ end }}) {
+func {{ .MountServer }}(mux goahttp.Muxer, h *{{ .ServerStruct }}) {
 	{{- range .Endpoints }}
 	{{ .MountHandler }}(mux, h.{{ .Method.VarName }})
 	{{- end }}
 	{{- range .FileServers }}
-		{{- if .IsDir }}
+		{{- if .Redirect }}
 	{{ .MountHandler }}(mux, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			upath := path.Clean(r.URL.Path)
-			rpath := upath
-			{{- range .RequestPaths }}
-			if strings.HasPrefix(upath, "{{ . }}") {
-				rpath = upath[{{ len . }}:]
-			}
-			{{- end }}
-			http.ServeFile(w, r, path.Join({{ printf "%q" .FilePath }}, rpath))
+			http.Redirect(w, r, "{{ .Redirect.URL }}", {{ .Redirect.StatusCode }})
 		}))
-	 	{{- else }}
-	{{ .MountHandler }}(mux, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.ServeFile(w, r, {{ printf "%q" .FilePath }})
-		}))
+	 	{{- else if .IsDir }}
+			{{- $filepath := addLeadingSlash (removeTrailingIndexHTML .FilePath) }}
+	{{ .MountHandler }}(mux, {{ range .RequestPaths }}{{if ne . $filepath }}goahttp.Replace("{{ . }}", "{{ $filepath }}", {{ end }}{{ end }}h.{{ .VarName }}){{ range .RequestPaths }}{{ if ne . $filepath }}){{ end}}{{ end }}
+		{{- else }}
+			{{- $filepath := addLeadingSlash (removeTrailingIndexHTML .FilePath) }}
+	{{ .MountHandler }}(mux, {{ range .RequestPaths }}{{if ne . $filepath }}goahttp.Replace("", "{{ $filepath }}", {{ end }}{{ end }}h.{{ .VarName }}){{ range .RequestPaths }}{{ if ne . $filepath }}){{ end}}{{ end }}
 		{{- end }}
 	{{- end }}
+}
+
+{{ printf "%s configures the mux to serve the %s endpoints." .MountServer .Service.Name | comment }}
+func (s *{{ .ServerStruct }}) {{ .MountServer }}(mux goahttp.Muxer) {
+	{{ .MountServer }}(mux, s)
 }
 `
 
@@ -412,8 +412,8 @@ const fileServerT = `{{ printf "%s configures the mux to serve GET request made 
 func {{ .MountHandler }}(mux goahttp.Muxer, h http.Handler) {
 	{{- if .IsDir }}
 		{{- range .RequestPaths }}
-	mux.Handle("GET", "{{ . }}/", h.ServeHTTP)
-	mux.Handle("GET", "{{ . }}/*{{ $.PathParam }}", h.ServeHTTP)
+	mux.Handle("GET", "{{ . }}{{if ne . "/"}}/{{end}}", h.ServeHTTP)
+	mux.Handle("GET", "{{ . }}{{if ne . "/"}}/{{end}}*{{ $.PathParam }}", h.ServeHTTP)
 		{{- end }}
 	{{- else }}
 		{{- range .RequestPaths }}
@@ -428,51 +428,53 @@ const serverHandlerInitT = `{{ printf "%s creates a HTTP handler which loads the
 func {{ .HandlerInit }}(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
-	dec func(*http.Request) goahttp.Decoder,
-	enc func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	eh func(context.Context, http.ResponseWriter, error),
-	{{- if .ServerStream }}
-	up goahttp.Upgrader,
-	connConfigFn goahttp.ConnConfigureFunc,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(err error) goahttp.Statuser,
+	{{- if isWebSocketEndpoint . }}
+	upgrader goahttp.Upgrader,
+	configurer goahttp.ConnConfigureFunc,
 	{{- end }}
 ) http.Handler {
+	{{- if (or (mustDecodeRequest .) (not (or .Redirect (isWebSocketEndpoint .))) (not .Redirect) .Method.SkipResponseBodyEncodeDecode) }}
 	var (
-		{{- if .ServerStream }}
-			{{- if .Payload.Ref }}
-		decodeRequest  = {{ .RequestDecoder }}(mux, dec)
-			{{- end }}
-		{{- else }}
-			{{- if .Payload.Ref }}
-		decodeRequest  = {{ .RequestDecoder }}(mux, dec)
-			{{- end }}
-		encodeResponse = {{ .ResponseEncoder }}(enc)
+	{{- end }}
+		{{- if mustDecodeRequest . }}
+		decodeRequest  = {{ .RequestDecoder }}(mux, decoder)
 		{{- end }}
-		encodeError    = {{ if .Errors }}{{ .ErrorEncoder }}{{ else }}goahttp.ErrorEncoder{{ end }}(enc)
+		{{- if not (or .Redirect (isWebSocketEndpoint .)) }}
+		encodeResponse = {{ .ResponseEncoder }}(encoder)
+		{{- end }}
+		{{- if (or (mustDecodeRequest .) (not .Redirect) .Method.SkipResponseBodyEncodeDecode) }}
+		encodeError    = {{ if .Errors }}{{ .ErrorEncoder }}{{ else }}goahttp.ErrorEncoder{{ end }}(encoder, formatter)
+		{{- end }}
+	{{- if (or (mustDecodeRequest .) (not (or .Redirect (isWebSocketEndpoint .))) (not .Redirect) .Method.SkipResponseBodyEncodeDecode) }}
 	)
+	{{- end }}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, {{ printf "%q" .Method.Name }})
 		ctx = context.WithValue(ctx, goa.ServiceKey, {{ printf "%q" .ServiceName }})
 
-	{{- if .Payload.Ref }}
-		payload, err := decodeRequest(r)
+	{{- if mustDecodeRequest . }}
+		{{ if .Redirect }}_{{ else }}payload{{ end }}, err := decodeRequest(r)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
+	{{- else if not .Redirect }}
+		var err error
 	{{- end }}
-
-	{{ if .ServerStream }}
+	{{- if isWebSocketEndpoint . }}
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		v := &{{ .ServicePkgName }}.{{ .Method.ServerStream.EndpointStruct }}{
-			Stream: &{{ .ServerStream.VarName }}{
-				upgrader: up,
-				connConfigFn: connConfigFn,
+			Stream: &{{ .ServerWebSocket.VarName }}{
+				upgrader: upgrader,
+				configurer: configurer,
 				cancel: cancel,
 				w: w,
 				r: r,
@@ -482,24 +484,46 @@ func {{ .HandlerInit }}(
 		{{- end }}
 		}
 		_, err = endpoint(ctx, v)
+	{{- else if .Method.SkipRequestBodyEncodeDecode }}
+		data := &{{ .ServicePkgName }}.{{ .Method.RequestStruct }}{ {{ if .Payload.Ref }}Payload: payload.({{ .Payload.Ref }}), {{ end }}Body: r.Body }
+		res, err := endpoint(ctx, data)
+	{{- else if .Redirect }}
+		http.Redirect(w, r, "{{ .Redirect.URL }}", {{ .Redirect.StatusCode }})
 	{{- else }}
 		res, err := endpoint(ctx, {{ if .Payload.Ref }}payload{{ else }}nil{{ end }})
 	{{- end }}
-
+	{{- if not .Redirect }}
 		if err != nil {
-			{{- if .ServerStream }}
-			if _, ok := err.(websocket.HandshakeError); ok {
+			{{- if isWebSocketEndpoint . }}
+			if _, werr := w.Write(nil); werr == http.ErrHijacked {
+				// Response writer has been hijacked, do not encode the error
+				errhandler(ctx, w, err)
 				return
 			}
 			{{- end }}
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
-	{{- if not .ServerStream }}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			eh(ctx, w, err)
+	{{- end }}
+	{{- if .Method.SkipResponseBodyEncodeDecode }}
+		o := res.(*{{ .ServicePkgName }}.{{ .Method.ResponseStruct }})
+		defer o.Body.Close()
+	{{- end }}
+	{{- if not (or .Redirect (isWebSocketEndpoint .)) }}
+		if err := encodeResponse(ctx, w, {{ if and .Method.SkipResponseBodyEncodeDecode .Result.Ref }}o.Result{{ else }}res{{ end }}); err != nil {
+			errhandler(ctx, w, err)
+			{{- if .Method.SkipResponseBodyEncodeDecode }}
+			return
+			{{- end }}
+		}
+	{{- end }}
+	{{- if .Method.SkipResponseBodyEncodeDecode }}
+		if _, err := io.Copy(w, o.Body); err != nil {
+			if err := encodeError(ctx, w, err); err != nil {
+				errhandler(ctx, w, err)
+			}
 		}
 	{{- end }}
 	})
@@ -530,20 +554,29 @@ func {{ .RequestDecoder }}(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		)
 		err = decoder(r).Decode(&body)
 		if err != nil {
+	{{- if .Payload.Request.MustHaveBody }}
 			if err == io.EOF {
 				return nil, goa.MissingPayloadError()
 			}
+	{{- else }}
+			if err == io.EOF {
+				err = nil
+			} else {
+	{{- end }}
 			return nil, goa.DecodePayloadError(err.Error())
+	{{- if not .Payload.Request.MustHaveBody }}
+			}
+	{{- end }}
 		}
-		{{- if .Payload.Request.ServerBody.ValidateRef }}
+	{{- if .Payload.Request.ServerBody.ValidateRef }}
 		{{ .Payload.Request.ServerBody.ValidateRef }}
 		if err != nil {
 			return nil, err
 		}
-		{{- end }}
+	{{- end }}
 {{- end }}
 {{- if not .MultipartRequestDecoder }}
-	{{- template "request_params_headers" .Payload.Request }}
+	{{- template "request_elements" .Payload.Request }}
 	{{- if .Payload.Request.MustValidate }}
 		if err != nil {
 			return nil, err
@@ -584,11 +617,11 @@ func {{ .RequestDecoder }}(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 	return payload, nil
 	}
 }
-` + requestParamsHeadersT
+` + requestElementsT
 
 // input: RequestData
-const requestParamsHeadersT = `{{- define "request_params_headers" }}
-{{- if or .PathParams .QueryParams .Headers }}
+const requestElementsT = `{{- define "request_elements" }}
+{{- if or .PathParams .QueryParams .Headers .Cookies }}
 {{- if .ServerBody }}{{/* we want a newline only if there was code before */}}
 {{ end }}
 		var (
@@ -601,8 +634,14 @@ const requestParamsHeadersT = `{{- define "request_params_headers" }}
 		{{- range .Headers }}
 			{{ .VarName }} {{ .TypeRef }}
 		{{- end }}
+		{{- range .Cookies }}
+			{{ .VarName }} {{ .TypeRef }}
+		{{- end }}
 		{{- if and .MustValidate (or (not .ServerBody) .Multipart) }}
 			err error
+		{{- end }}
+		{{- if .Cookies }}
+			c *http.Cookie
 		{{- end }}
 		{{- if .PathParams }}
 
@@ -651,7 +690,11 @@ const requestParamsHeadersT = `{{- define "request_params_headers" }}
 		}
 		{{- else if .DefaultValue }}
 		if {{ .VarName }} == nil {
-			{{ .VarName }} = {{ printf "%#v" .DefaultValue }}
+			{{ .VarName }} = []string{
+                {{- range $i, $v := .DefaultValue }}
+                    {{- if $i }}{{ print ", " }}{{ end }}
+                    {{- printf "%q" $v -}} 
+                {{- end -}} }
 		}
 		{{- end }}
 
@@ -660,7 +703,7 @@ const requestParamsHeadersT = `{{- define "request_params_headers" }}
 		{{ .VarName }}Raw := r.URL.Query()["{{ .Name }}"]
 		{{- if .Required }}
 		if {{ .VarName }}Raw == nil {
-			return goa.MergeErrors(err, goa.MissingFieldError("{{ .Name }}", "query string"))
+			return nil, goa.MergeErrors(err, goa.MissingFieldError("{{ .Name }}", "query string"))
 		}
 		{{- else if .DefaultValue }}
 		if {{ .VarName }}Raw == nil {
@@ -839,6 +882,59 @@ const requestParamsHeadersT = `{{- define "request_params_headers" }}
 		{{ .Validate }}
 	{{- end }}
 {{- end }}
+
+{{- range .Cookies }}
+	c, {{ if not .Required }}_{{ else }}err{{ end }} = r.Cookie("{{ .Name }}")
+	{{- if and (or (eq .Type.Name "string") (eq .Type.Name "any")) .Required }}
+		if err == http.ErrNoCookie {
+			err = goa.MergeErrors(err, goa.MissingFieldError("{{ .Name }}", "cookie"))
+		} else {
+			{{ .VarName }} = c.Value
+		}
+
+	{{- else if (or (eq .Type.Name "string") (eq .Type.Name "any")) }}
+		var {{ .VarName }}Raw string
+		if c != nil {
+			{{ .VarName }}Raw = c.Value
+		}
+		if {{ .VarName }}Raw != "" {
+			{{ .VarName }} = {{ if and (eq .Type.Name "string") .Pointer }}&{{ end }}{{ .VarName }}Raw
+		}
+		{{- if .DefaultValue }} else {
+			{{ .VarName }} = {{ if eq .Type.Name "string" }}{{ printf "%q" .DefaultValue }}{{ else }}{{ printf "%#v" .DefaultValue }}{{ end }}
+		}
+		{{- end }}
+
+	{{- else }}{{/* not string and not any */}}
+	{
+		var {{ .VarName }}Raw string
+		if c != nil {
+			{{ .VarName }}Raw = c.Value
+		}
+		{{- if .Required }}
+		if {{ .VarName }}Raw == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("{{ .Name }}", "cookie"))
+		}
+		{{- else if .DefaultValue }}
+		if {{ .VarName }}Raw == "" {
+			{{ .VarName }} = {{ printf "%#v" .DefaultValue }}
+		}
+		{{- end }}
+
+		{{- if .DefaultValue }}else {
+		{{- else if not .Required }}
+		if {{ .VarName }}Raw != "" {
+		{{- end }}
+		{{- template "type_conversion" . }}
+		{{- if or .DefaultValue (not .Required) }}
+		}
+		{{- end }}
+	}
+	{{- end }}
+	{{- if .Validate }}
+		{{ .Validate }}
+	{{- end }}
+{{- end }}
 {{- end }}
 {{- end }}
 
@@ -887,11 +983,12 @@ const requestParamsHeadersT = `{{- define "request_params_headers" }}
 	{{- else if eq .Type.ElemType.Type.Name "map" }}
 		{{- template "map_conversion" (mapQueryDecodeData .Type.ElemType.Type (printf "%s[key%s]" .VarName .Loop) 1) }}
 	{{- else }}
-		var val {{ goTypeRef .Type.ElemType.Type }}
+		var val{{ .Loop }} {{ goTypeRef .Type.ElemType.Type }}
 		{
-			{{- template "type_conversion" (conversionData "val" (printf "%q" "query") .Type.ElemType.Type) }}
+			val{{ .Loop }}Raw := valRaw[0]
+			{{- template "type_conversion" (conversionData (printf "val%s" .Loop)  (printf "%q" "query") .Type.ElemType.Type) }}
 		}
-		{{ .VarName }}[key{{ .Loop }}] = val
+		{{ .VarName }}[key{{ .Loop }}] = val{{ .Loop }}
 	{{- end }}
 {{- end }}
 ` + typeConversionT
@@ -1067,7 +1164,7 @@ func {{ .ResponseEncoder }}(encoder func(context.Context, http.ResponseWriter) g
 				w.Header().Set("goa-view", res.View)
 			{{- end }}
 		{{- else }}
-			res := v.({{ .Result.Ref }})
+			res, _ := v.({{ .Result.Ref }})
 		{{- end }}
 		{{- range .Result.Responses }}
 			{{- if .ContentType }}
@@ -1102,8 +1199,8 @@ func {{ .ResponseEncoder }}(encoder func(context.Context, http.ResponseWriter) g
 
 // input: EndpointData
 const errorEncoderT = `{{ printf "%s returns an encoder for errors returned by the %s %s endpoint." .ErrorEncoder .Method.Name .ServiceName | comment }}
-func {{ .ErrorEncoder }}(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, error) error {
-	encodeError := goahttp.ErrorEncoder(encoder)
+func {{ .ErrorEncoder }}(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		en, ok := v.(ErrorNamer)
 		if !ok {
@@ -1115,9 +1212,14 @@ func {{ .ErrorEncoder }}(encoder func(context.Context, http.ResponseWriter) goah
 		case {{ printf "%q" .Name }}:
 			res := v.({{ $err.Ref }})
 			{{- with .Response}}
+				{{- if .ContentType }}
+					ctx = context.WithValue(ctx, goahttp.ContentTypeKey, "{{ .ContentType }}")
+				{{- end }}
 				{{- template "response" . }}
 				{{- if .ServerBody }}
 				return enc.Encode(body)
+				{{- else }}
+				return nil
 				{{- end }}
 			{{- end }}
 	{{- end }}
@@ -1146,7 +1248,16 @@ const responseT = `{{ define "response" -}}
 			{{- end }}
 	}
 		{{- else if (index .ServerBody 0).Init }}
-	body := {{ (index .ServerBody 0).Init.Name }}({{ range (index .ServerBody 0).Init.ServerArgs }}{{ .Ref }}, {{ end }})
+			{{- if .ErrorHeader }}
+	var body interface{}
+	if formatter != nil {
+		body = formatter({{ (index (index .ServerBody 0).Init.ServerArgs 0).Ref }})
+	} else {
+			{{- end }}
+	body {{ if not .ErrorHeader}}:{{ end }}= {{ (index .ServerBody 0).Init.Name }}({{ range (index .ServerBody 0).Init.ServerArgs }}{{ .Ref }}, {{ end }})
+			{{- if .ErrorHeader }}
+	}
+			{{- end }}
 		{{- else }}
 	body := res{{ if $.ViewedResult }}.Projected{{ end }}{{ if .ResultAttr }}.{{ .ResultAttr }}{{ end }}
 		{{- end }}
@@ -1155,15 +1266,26 @@ const responseT = `{{ define "response" -}}
 		{{- $initDef := and (or .FieldPointer .Slice) .DefaultValue (not $.TagName) }}
 		{{- $checkNil := and (or .FieldPointer .Slice (eq .Type.Name "bytes") (eq .Type.Name "any") $initDef) (not $.TagName) }}
 		{{- if $checkNil }}
-	if res.{{ if $.ViewedResult }}Projected.{{ end }}{{ .FieldName }} != nil {
+	if res{{ if .FieldName }}.{{ end }}{{ if $.ViewedResult }}Projected.{{ end }}{{ if .FieldName }}{{ .FieldName }}{{ end }} != nil {
 		{{- end }}
 
-		{{- if eq .Type.Name "string" }}
+		{{- if and (eq .Type.Name "string") (not (isAliased .FieldType)) }}
 	w.Header().Set("{{ .CanonicalName }}", {{ if or .FieldPointer $.ViewedResult }}*{{ end }}res{{ if $.ViewedResult }}.Projected{{ end }}{{ if .FieldName }}.{{ .FieldName }}{{ end }})
 		{{- else }}
+{{- if not $checkNil }}
+{
+{{- end }}
+			{{- if isAliased .FieldType }}
+	val := {{ goTypeRef .Type }}({{ if .FieldPointer }}*{{ end }}res{{ if $.ViewedResult }}.Projected{{ end }}{{ if .FieldName }}.{{ .FieldName }}{{ end }})
+	{{ template "header_conversion" (headerConversionData .Type (printf "%ss" .VarName) true "val") }}
+			{{- else }}
 	val := res{{ if $.ViewedResult }}.Projected{{ end }}{{ if .FieldName }}.{{ .FieldName }}{{ end }}
 	{{ template "header_conversion" (headerConversionData .Type (printf "%ss" .VarName) (not .FieldPointer) "val") }}
+			{{- end }}
 	w.Header().Set("{{ .CanonicalName }}", {{ .VarName }}s)
+{{- if not $checkNil }}
+}
+{{- end }}
 		{{- end }}
 
 		{{- if $initDef }}
@@ -1177,8 +1299,56 @@ const responseT = `{{ define "response" -}}
 
 	{{- end }}
 
+	{{- range .Cookies }}
+		{{- $initDef := and (or .FieldPointer .Slice) .DefaultValue }}
+		{{- $checkNil := and (or .FieldPointer .Slice (eq .Type.Name "bytes") (eq .Type.Name "any") $initDef) }}
+		{{- if $checkNil }}
+	if res.{{ if $.ViewedResult }}Projected.{{ end }}{{ .FieldName }} != nil {
+		{{- end }}
+
+		{{- if eq .Type.Name "string" }}
+	{{ .VarName }} := {{ if or .FieldPointer $.ViewedResult }}*{{ end }}res{{ if $.ViewedResult }}.Projected{{ end }}{{ if .FieldName }}.{{ .FieldName }}{{ end }}
+		{{- else }}
+			{{- if isAliased .FieldType }}
+	{{ .VarName }}raw := {{ goTypeRef .Type }}({{ if .FieldPointer }}*{{ end }}res{{ if $.ViewedResult }}.Projected{{ end }}{{ if .FieldName }}.{{ .FieldName }}{{ end }})
+	{{ template "header_conversion" (headerConversionData .Type (printf "%sraw" .VarName) true .VarName) }}
+			{{- else }}
+	{{ .VarName }}raw := res{{ if $.ViewedResult }}.Projected{{ end }}{{ if .FieldName }}.{{ .FieldName }}{{ end }}
+	{{ template "header_conversion" (headerConversionData .Type (printf "%sraw" .VarName) (not .FieldPointer) .VarName) }}
+			{{- end }}
+		{{- end }}
+
+		{{- if $initDef }}
+	{{ if $checkNil }} } else { {{ else }}if res{{ if $.ViewedResult }}.Projected{{ end }}.{{ .FieldName }} == nil { {{ end }}
+		{{ .VarName }} := "{{ printValue .Type .DefaultValue }}"
+		{{- end }}
+		http.SetCookie(w, &http.Cookie{
+			Name: {{ printf "%q" .Name }},
+			Value: {{ .VarName }},
+			{{- if .MaxAge }}
+			MaxAge: {{ .MaxAge }},
+			{{- end }}
+			{{- if .Path }}
+			Path: {{ printf "%q" .Path }},
+			{{- end }}
+			{{- if .Domain }}
+			Domain: {{ printf "%q" .Domain }},
+			{{- end }}
+			{{- if .Secure }}
+			Secure: true,
+			{{- end }}
+			{{- if .HTTPOnly }}
+			HttpOnly: true,
+			{{- end }}
+		})
+		{{- if or $checkNil $initDef }}
+	}
+		{{- end }}
+
+	{{- end }}
+
 	{{- if .ErrorHeader }}
-	w.Header().Set("goa-error", {{ printf "%q" .ErrorHeader }})
+	w.Header().Set("goa-error", res.ErrorName())
 	{{- end }}
 	w.WriteHeader({{ .StatusCode }})
 {{- end }}
@@ -1215,7 +1385,7 @@ const responseT = `{{ define "response" -}}
 		{{ .VarName }}Slice := make([]string, len({{ .Target }}))
 		for i, e := range {{ .Target }}  {
 			{{ template "header_conversion" (headerConversionData .Type.ElemType.Type "es" true "e") }}
-			{{ .VarName }}Slice[i] = es	
+			{{ .VarName }}Slice[i] = es
 		}
 		{{ .VarName }} := strings.Join({{ .VarName }}Slice, ", ")
 		{{- end }}
@@ -1243,7 +1413,7 @@ func {{ .InitName }}(mux goahttp.Muxer, {{ .VarName }} {{ .FuncName }}) func(r *
 			if err := {{ .VarName }}(mr, p); err != nil {
 				return err
 			}
-			{{- template "request_params_headers" .Payload.Request }}
+			{{- template "request_elements" .Payload.Request }}
 			{{- if .Payload.Request.MustValidate }}
 			if err != nil {
 				return err
@@ -1252,7 +1422,7 @@ func {{ .InitName }}(mux goahttp.Muxer, {{ .VarName }} {{ .FuncName }}) func(r *
 			{{- if .Payload.Request.PayloadInit }}
 				{{- range .Payload.Request.PayloadInit.ServerArgs }}
 					{{- if .FieldName }}
-			(*p).{{ .FieldName }} = {{ if and (not .Pointer) .FieldPointer }}&{{ end }}{{ .Name }}
+			(*p).{{ .FieldName }} = {{ if and (not .Pointer) .FieldPointer }}&{{ end }}{{ .VarName }}
 					{{- end }}
 				{{- end }}
 			{{- end }}
@@ -1260,4 +1430,4 @@ func {{ .InitName }}(mux goahttp.Muxer, {{ .VarName }} {{ .FuncName }}) func(r *
 		})
 	}
 }
-` + requestParamsHeadersT
+` + requestElementsT

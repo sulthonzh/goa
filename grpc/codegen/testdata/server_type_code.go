@@ -22,35 +22,6 @@ func NewMethodPayloadWithNestedTypesResponse() *service_payload_with_nested_type
 	return message
 }
 
-// ValidateMethodPayloadWithNestedTypesRequest runs the validations defined on
-// MethodPayloadWithNestedTypesRequest.
-func ValidateMethodPayloadWithNestedTypesRequest(message *service_payload_with_nested_typespb.MethodPayloadWithNestedTypesRequest) (err error) {
-	if message.AParams != nil {
-		if err2 := ValidateAParams(message.AParams); err2 != nil {
-			err = goa.MergeErrors(err, err2)
-		}
-	}
-	return
-}
-
-// ValidateAParams runs the validations defined on AParams.
-func ValidateAParams(message *service_payload_with_nested_typespb.AParams) (err error) {
-
-	return
-}
-
-// ValidateArrayOfString runs the validations defined on ArrayOfString.
-func ValidateArrayOfString(message *service_payload_with_nested_typespb.ArrayOfString) (err error) {
-
-	return
-}
-
-// ValidateBParams runs the validations defined on BParams.
-func ValidateBParams(message *service_payload_with_nested_typespb.BParams) (err error) {
-
-	return
-}
-
 // protobufServicePayloadWithNestedTypespbAParamsToServicepayloadwithnestedtypesAParams
 // builds a value of type *servicepayloadwithnestedtypes.AParams from a value
 // of type *service_payload_with_nested_typespb.AParams.
@@ -139,6 +110,34 @@ func svcServicepayloadwithnestedtypesBParamsToServicePayloadWithNestedTypespbBPa
 }
 `
 
+const PayloadWithAliasTypeServerTypeCode = `// NewMethodMessageUserTypeWithAliasPayload builds the payload of the
+// "MethodMessageUserTypeWithAlias" endpoint of the
+// "ServiceMessageUserTypeWithAlias" service from the gRPC request type.
+func NewMethodMessageUserTypeWithAliasPayload(message *service_message_user_type_with_aliaspb.MethodMessageUserTypeWithAliasRequest) *servicemessageusertypewithalias.PayloadAliasT {
+	v := &servicemessageusertypewithalias.PayloadAliasT{
+		IntAliasField: servicemessageusertypewithalias.IntAlias(message.IntAliasField),
+	}
+	if message.OptionalIntAliasField != nil {
+		optionalIntAliasFieldptr := servicemessageusertypewithalias.IntAlias(message.OptionalIntAliasField)
+		v.OptionalIntAliasField = &optionalIntAliasFieldptr
+	}
+	return v
+}
+
+// NewMethodMessageUserTypeWithAliasResponse builds the gRPC response type from
+// the result of the "MethodMessageUserTypeWithAlias" endpoint of the
+// "ServiceMessageUserTypeWithAlias" service.
+func NewMethodMessageUserTypeWithAliasResponse(result *servicemessageusertypewithalias.PayloadAliasT) *service_message_user_type_with_aliaspb.MethodMessageUserTypeWithAliasResponse {
+	message := &service_message_user_type_with_aliaspb.MethodMessageUserTypeWithAliasResponse{
+		IntAliasField: int(result.IntAliasField),
+	}
+	if result.OptionalIntAliasField != nil {
+		message.OptionalIntAliasField = int(*result.OptionalIntAliasField)
+	}
+	return message
+}
+`
+
 const ResultWithCollectionServerTypeCode = `// NewMethodResultWithCollectionResponse builds the gRPC response type from the
 // result of the "MethodResultWithCollection" endpoint of the
 // "ServiceResultWithCollection" service.
@@ -195,10 +194,60 @@ func protobufServiceResultWithCollectionpbResultTToServiceresultwithcollectionRe
 }
 `
 
+const PayloadWithMixedAttributesServerTypeCode = `// NewUnaryMethodPayload builds the payload of the "UnaryMethod" endpoint of
+// the "ServicePayloadWithMixedAttributes" service from the gRPC request type.
+func NewUnaryMethodPayload(message *service_payload_with_mixed_attributespb.UnaryMethodRequest) *servicepayloadwithmixedattributes.APayload {
+	v := &servicepayloadwithmixedattributes.APayload{
+		Required:        int(message.Required),
+		Default:         int(message.Default),
+		RequiredDefault: int(message.RequiredDefault),
+	}
+	if message.Optional != 0 {
+		optionalptr := int(message.Optional)
+		v.Optional = &optionalptr
+	}
+	if message.Default == 0 {
+		v.Default = 100
+	}
+	return v
+}
+
+// NewUnaryMethodResponse builds the gRPC response type from the result of the
+// "UnaryMethod" endpoint of the "ServicePayloadWithMixedAttributes" service.
+func NewUnaryMethodResponse() *service_payload_with_mixed_attributespb.UnaryMethodResponse {
+	message := &service_payload_with_mixed_attributespb.UnaryMethodResponse{}
+	return message
+}
+
+// NewStreamingMethodResponse builds the gRPC response type from the result of
+// the "StreamingMethod" endpoint of the "ServicePayloadWithMixedAttributes"
+// service.
+func NewStreamingMethodResponse() *service_payload_with_mixed_attributespb.StreamingMethodResponse {
+	message := &service_payload_with_mixed_attributespb.StreamingMethodResponse{}
+	return message
+}
+
+func NewAPayload(v *service_payload_with_mixed_attributespb.StreamingMethodStreamingRequest) *servicepayloadwithmixedattributes.APayload {
+	spayload := &servicepayloadwithmixedattributes.APayload{
+		Required:        int(v.Required),
+		Default:         int(v.Default),
+		RequiredDefault: int(v.RequiredDefault),
+	}
+	if v.Optional != 0 {
+		optionalptr := int(v.Optional)
+		spayload.Optional = &optionalptr
+	}
+	if v.Default == 0 {
+		spayload.Default = 100
+	}
+	return spayload
+}
+`
+
 const WithErrorsServerTypeCode = `// NewMethodUnaryRPCWithErrorsPayload builds the payload of the
 // "MethodUnaryRPCWithErrors" endpoint of the "ServiceUnaryRPCWithErrors"
 // service from the gRPC request type.
-func NewMethodUnaryRPCWithErrorsPayload(message *service_unaryrpc_with_errorspb.MethodUnaryRPCWithErrorsRequest) string {
+func NewMethodUnaryRPCWithErrorsPayload(message *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsRequest) string {
 	v := message.Field
 	return v
 }
@@ -206,8 +255,8 @@ func NewMethodUnaryRPCWithErrorsPayload(message *service_unaryrpc_with_errorspb.
 // NewMethodUnaryRPCWithErrorsResponse builds the gRPC response type from the
 // result of the "MethodUnaryRPCWithErrors" endpoint of the
 // "ServiceUnaryRPCWithErrors" service.
-func NewMethodUnaryRPCWithErrorsResponse(result string) *service_unaryrpc_with_errorspb.MethodUnaryRPCWithErrorsResponse {
-	message := &service_unaryrpc_with_errorspb.MethodUnaryRPCWithErrorsResponse{}
+func NewMethodUnaryRPCWithErrorsResponse(result string) *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsResponse {
+	message := &service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsResponse{}
 	message.Field = result
 	return message
 }
@@ -215,8 +264,8 @@ func NewMethodUnaryRPCWithErrorsResponse(result string) *service_unaryrpc_with_e
 // NewMethodUnaryRPCWithErrorsInternalError builds the gRPC error response type
 // from the error of the "MethodUnaryRPCWithErrors" endpoint of the
 // "ServiceUnaryRPCWithErrors" service.
-func NewMethodUnaryRPCWithErrorsInternalError(er *serviceunaryrpcwitherrors.AnotherError) *service_unaryrpc_with_errorspb.MethodUnaryRPCWithErrorsInternalError {
-	message := &service_unaryrpc_with_errorspb.MethodUnaryRPCWithErrorsInternalError{
+func NewMethodUnaryRPCWithErrorsInternalError(er *serviceunaryrpcwitherrors.AnotherError) *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsInternalError {
+	message := &service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsInternalError{
 		Name: er.Name,
 	}
 	if er.Description != nil {
@@ -228,8 +277,8 @@ func NewMethodUnaryRPCWithErrorsInternalError(er *serviceunaryrpcwitherrors.Anot
 // NewMethodUnaryRPCWithErrorsBadRequestError builds the gRPC error response
 // type from the error of the "MethodUnaryRPCWithErrors" endpoint of the
 // "ServiceUnaryRPCWithErrors" service.
-func NewMethodUnaryRPCWithErrorsBadRequestError(er *serviceunaryrpcwitherrors.AnotherError) *service_unaryrpc_with_errorspb.MethodUnaryRPCWithErrorsBadRequestError {
-	message := &service_unaryrpc_with_errorspb.MethodUnaryRPCWithErrorsBadRequestError{
+func NewMethodUnaryRPCWithErrorsBadRequestError(er *serviceunaryrpcwitherrors.AnotherError) *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsBadRequestError {
+	message := &service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsBadRequestError{
 		Name: er.Name,
 	}
 	if er.Description != nil {
@@ -241,11 +290,60 @@ func NewMethodUnaryRPCWithErrorsBadRequestError(er *serviceunaryrpcwitherrors.An
 // NewMethodUnaryRPCWithErrorsCustomErrorError builds the gRPC error response
 // type from the error of the "MethodUnaryRPCWithErrors" endpoint of the
 // "ServiceUnaryRPCWithErrors" service.
-func NewMethodUnaryRPCWithErrorsCustomErrorError(er *serviceunaryrpcwitherrors.ErrorType) *service_unaryrpc_with_errorspb.MethodUnaryRPCWithErrorsCustomErrorError {
-	message := &service_unaryrpc_with_errorspb.MethodUnaryRPCWithErrorsCustomErrorError{}
+func NewMethodUnaryRPCWithErrorsCustomErrorError(er *serviceunaryrpcwitherrors.ErrorType) *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsCustomErrorError {
+	message := &service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsCustomErrorError{}
 	if er.A != nil {
 		message.A = *er.A
 	}
 	return message
+}
+`
+
+const ElemValidationServerTypesFile = `// NewMethodElemValidationPayload builds the payload of the
+// "MethodElemValidation" endpoint of the "ServiceElemValidation" service from
+// the gRPC request type.
+func NewMethodElemValidationPayload(message *service_elem_validationpb.MethodElemValidationRequest) *serviceelemvalidation.ResultType {
+	v := &serviceelemvalidation.ResultType{}
+	if message.Foo != nil {
+		v.Foo = make(map[string][]string, len(message.Foo))
+		for key, val := range message.Foo {
+			tk := key
+			tv := make([]string, len(val.Field))
+			for i, val := range val.Field {
+				tv[i] = val
+			}
+			v.Foo[tk] = tv
+		}
+	}
+	return v
+}
+
+// NewMethodElemValidationResponse builds the gRPC response type from the
+// result of the "MethodElemValidation" endpoint of the "ServiceElemValidation"
+// service.
+func NewMethodElemValidationResponse() *service_elem_validationpb.MethodElemValidationResponse {
+	message := &service_elem_validationpb.MethodElemValidationResponse{}
+	return message
+}
+
+// ValidateMethodElemValidationRequest runs the validations defined on
+// MethodElemValidationRequest.
+func ValidateMethodElemValidationRequest(message *service_elem_validationpb.MethodElemValidationRequest) (err error) {
+	for _, v := range message.Foo {
+		if v != nil {
+			if err2 := ValidateArrayOfString(v); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateArrayOfString runs the validations defined on ArrayOfString.
+func ValidateArrayOfString(message *service_elem_validationpb.ArrayOfString) (err error) {
+	if len(message.Field) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("message.field", message.Field, len(message.Field), 1, true))
+	}
+	return
 }
 `

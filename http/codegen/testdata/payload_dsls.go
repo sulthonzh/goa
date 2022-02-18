@@ -1291,6 +1291,22 @@ var PayloadQueryStringDefaultDSL = func() {
 	})
 }
 
+var PayloadQueryStringSliceDefaultDSL = func() {
+	Service("ServiceQueryStringSliceDefault", func() {
+		Method("MethodQueryStringSliceDefault", func() {
+			Payload(func() {
+				Attribute("q", ArrayOf(String), func() {
+					Default([]string{"hello", "goodbye"})
+				})
+			})
+			HTTP(func() {
+				GET("/")
+				Param("q")
+			})
+		})
+	})
+}
+
 var PayloadQueryStringDefaultValidateDSL = func() {
 	Service("ServiceQueryStringDefaultValidate", func() {
 		Method("MethodQueryStringDefaultValidate", func() {
@@ -1317,6 +1333,24 @@ var PayloadQueryPrimitiveStringDefaultDSL = func() {
 			HTTP(func() {
 				GET("/")
 				Param("q")
+			})
+		})
+	})
+}
+
+var PayloadJWTAuthorizationQueryDSL = func() {
+	var JWT = JWTSecurity("jwt", func() {
+		Scope("api:read")
+	})
+	Service("ServiceHeaderPrimitiveStringDefault", func() {
+		Method("MethodHeaderPrimitiveStringDefault", func() {
+			Security(JWT)
+			Payload(func() {
+				Token("token", String)
+			})
+			HTTP(func() {
+				GET("")
+				Param("token")
 			})
 		})
 	})
@@ -1551,6 +1585,66 @@ var PayloadHeaderArrayStringValidateDSL = func() {
 	})
 }
 
+var PayloadHeaderIntDSL = func() {
+	Service("ServiceHeaderInt", func() {
+		Method("MethodHeaderInt", func() {
+			Payload(func() {
+				Attribute("h", Int)
+			})
+			HTTP(func() {
+				GET("/")
+				Header("h")
+			})
+		})
+	})
+}
+
+var PayloadHeaderIntValidateDSL = func() {
+	Service("ServiceHeaderIntValidate", func() {
+		Method("MethodHeaderIntValidate", func() {
+			Payload(func() {
+				Attribute("h", Int, func() {
+					Enum(1, 2)
+				})
+			})
+			HTTP(func() {
+				GET("/")
+				Header("h")
+			})
+		})
+	})
+}
+
+var PayloadHeaderArrayIntDSL = func() {
+	Service("ServiceHeaderArrayInt", func() {
+		Method("MethodHeaderArrayInt", func() {
+			Payload(func() {
+				Attribute("h", ArrayOf(Int))
+			})
+			HTTP(func() {
+				GET("/")
+				Header("h")
+			})
+		})
+	})
+}
+
+var PayloadHeaderArrayIntValidateDSL = func() {
+	Service("ServiceHeaderArrayIntValidate", func() {
+		Method("MethodHeaderArrayIntValidate", func() {
+			Payload(func() {
+				Attribute("h", ArrayOf(Int, func() {
+					Enum(1, 2)
+				}))
+			})
+			HTTP(func() {
+				GET("/")
+				Header("h")
+			})
+		})
+	})
+}
+
 var PayloadHeaderPrimitiveStringValidateDSL = func() {
 	Service("ServiceHeaderPrimitiveStringValidate", func() {
 		Method("MethodHeaderPrimitiveStringValidate", func() {
@@ -1660,6 +1754,147 @@ var PayloadHeaderPrimitiveStringDefaultDSL = func() {
 	})
 }
 
+var PayloadCookieStringDSL = func() {
+	Service("ServiceCookieString", func() {
+		Method("MethodCookieString", func() {
+			Payload(func() {
+				Attribute("c", String)
+			})
+			HTTP(func() {
+				GET("/")
+				Cookie("c")
+			})
+		})
+	})
+}
+
+var PayloadCookieStringValidateDSL = func() {
+	Service("ServiceCookieStringValidate", func() {
+		Method("MethodCookieStringValidate", func() {
+			Payload(func() {
+				Attribute("c", String, func() {
+					Pattern("cookie")
+				})
+			})
+			HTTP(func() {
+				GET("/")
+				Cookie("c")
+			})
+		})
+	})
+}
+
+var PayloadCookiePrimitiveStringValidateDSL = func() {
+	Service("ServiceCookiePrimitiveStringValidate", func() {
+		Method("MethodCookiePrimitiveStringValidate", func() {
+			Payload(String, func() {
+				Enum("val")
+			})
+			HTTP(func() {
+				GET("/")
+				Cookie("c")
+			})
+		})
+	})
+}
+
+var PayloadCookiePrimitiveBoolValidateDSL = func() {
+	Service("ServiceCookiePrimitiveBoolValidate", func() {
+		Method("MethodCookiePrimitiveBoolValidate", func() {
+			Payload(Boolean, func() {
+				Enum(true)
+			})
+			HTTP(func() {
+				GET("/")
+				Cookie("c")
+			})
+		})
+	})
+}
+
+var PayloadCookieStringDefaultDSL = func() {
+	Service("ServiceCookieStringDefault", func() {
+		Method("MethodCookieStringDefault", func() {
+			Payload(func() {
+				Attribute("c", String, func() {
+					Default("def")
+				})
+			})
+			HTTP(func() {
+				GET("/")
+				Cookie("c")
+			})
+		})
+	})
+}
+
+var PayloadCookieStringDefaultValidateDSL = func() {
+	Service("ServiceCookieStringDefaultValidate", func() {
+		Method("MethodCookieStringDefaultValidate", func() {
+			Payload(func() {
+				Attribute("c", String, func() {
+					Default("def")
+					Enum("def")
+				})
+			})
+			HTTP(func() {
+				GET("/")
+				Cookie("c")
+			})
+		})
+	})
+}
+
+var PayloadCookiePrimitiveStringDefaultDSL = func() {
+	Service("ServiceCookiePrimitiveStringDefault", func() {
+		Method("MethodCookiePrimitiveStringDefault", func() {
+			Payload(String, func() {
+				Default("def")
+			})
+			HTTP(func() {
+				GET("")
+				Cookie("c")
+			})
+		})
+	})
+}
+
+var PayloadJWTAuthorizationHeaderDSL = func() {
+	var JWT = JWTSecurity("jwt", func() {
+		Scope("api:read")
+	})
+	Service("ServiceHeaderPrimitiveStringDefault", func() {
+		Method("MethodHeaderPrimitiveStringDefault", func() {
+			Security(JWT)
+			Payload(func() {
+				Token("token", String)
+			})
+			HTTP(func() {
+				GET("")
+			})
+		})
+	})
+}
+
+var PayloadJWTAuthorizationCustomHeaderDSL = func() {
+	var JWT = JWTSecurity("jwt", func() {
+		Scope("api:read")
+	})
+	Service("ServiceHeaderPrimitiveStringDefault", func() {
+		Method("MethodHeaderPrimitiveStringDefault", func() {
+			Security(JWT)
+			Payload(func() {
+				Token("token", String)
+				Required("token")
+			})
+			HTTP(func() {
+				GET("")
+				Header("token:X-Auth")
+			})
+		})
+	})
+}
+
 var PayloadBodyStringDSL = func() {
 	Service("ServiceBodyString", func() {
 		Method("MethodBodyString", func() {
@@ -1750,6 +1985,41 @@ var PayloadBodyUserValidateDSL = func() {
 			Payload(PayloadType)
 			HTTP(func() {
 				POST("/")
+				Body("a")
+			})
+		})
+	})
+}
+
+var PayloadBodyObjectDSL = func() {
+	Service("ServiceBodyObject", func() {
+		Method("MethodBodyObject", func() {
+			Payload(func() {
+				Attribute("b", String)
+			})
+			HTTP(func() {
+				POST("/")
+				Body(func() {
+					Attribute("b", String)
+				})
+			})
+		})
+	})
+}
+
+var PayloadBodyObjectValidateDSL = func() {
+	Service("ServiceBodyObjectValidate", func() {
+		Method("MethodBodyObjectValidate", func() {
+			Payload(func() {
+				Attribute("b", String)
+				Required("b")
+			})
+			HTTP(func() {
+				POST("/")
+				Body(func() {
+					Attribute("b", String)
+					Required("b")
+				})
 			})
 		})
 	})
@@ -2003,11 +2273,7 @@ var PayloadBodyPrimitiveFieldArrayUserDSL = func() {
 }
 
 var PayloadExtendBodyPrimitiveFieldArrayUserDSL = func() {
-	var Ext = Type("Ext", func() {
-		Attribute("b", String)
-	})
 	var PayloadType = Type("PayloadType", func() {
-		Extend(Ext)
 		Attribute("a", ArrayOf(String))
 	})
 	Service("ServiceBodyPrimitiveArrayUser", func() {
@@ -2027,7 +2293,6 @@ var PayloadExtendBodyPrimitiveFieldStringDSL = func() {
 	})
 	var PayloadType = Type("PayloadType", func() {
 		Extend(Ext)
-		Attribute("a", ArrayOf(String))
 	})
 	Service("ServiceBodyPrimitiveArrayUser", func() {
 		Method("MethodBodyPrimitiveArrayUser", func() {
@@ -2217,6 +2482,22 @@ var PayloadBodyQueryPathObjectDSL = func() {
 	})
 }
 
+var ParamValidateDSL = func() {
+	Service("ServiceParamValidate", func() {
+		Method("MethodParamValidate", func() {
+			Payload(func() {
+				Attribute("a", Int, func() {
+					Minimum(1)
+				})
+			})
+			HTTP(func() {
+				POST("/")
+				Param("a")
+			})
+		})
+	})
+}
+
 var PayloadBodyQueryPathObjectValidateDSL = func() {
 	Service("ServiceBodyQueryPathObjectValidate", func() {
 		Method("MethodBodyQueryPathObjectValidate", func() {
@@ -2329,6 +2610,24 @@ var PayloadBodyUserInnerDefaultDSL = func() {
 	})
 }
 
+var PayloadBodyUserOriginDSL = func() {
+	var PayloadType = Type("PayloadType", func() {
+		Attribute("a")
+		Required("a")
+	})
+	Service("ServiceBodyUserOriginDefault", func() {
+		Method("MethodBodyUserOriginDefault", func() {
+			Payload(func() {
+				Attribute("body", PayloadType)
+			})
+			HTTP(func() {
+				POST("/")
+				Body("body")
+			})
+		})
+	})
+}
+
 var PayloadBodyInlineArrayUserDSL = func() {
 	var ElemType = Type("ElemType", func() {
 		Attribute("a", String, func() {
@@ -2376,6 +2675,41 @@ var PayloadBodyInlineMapUserDSL = func() {
 			})
 		})
 	})
+}
+
+var PayloadBodyInlineObjectDSL = func() {
+	Service("ServiceBodyInlineObject", func() {
+		Method("MethodBodyInlineObject", func() {
+			Payload(func() {
+				Attribute("a", String)
+			})
+			HTTP(func() {
+				POST("/")
+				Body(func() {
+					Attribute("a")
+				})
+			})
+		})
+	})
+}
+
+var PayloadBodyInlineObjectDefaultDSL = func() {
+	Service("ServiceBodyInlineObject", func() {
+		Method("MethodBodyInlineObject", func() {
+			Payload(func() {
+				Attribute("a", String, func() {
+					Default("foo")
+				})
+			})
+			HTTP(func() {
+				POST("/")
+				Body(func() {
+					Attribute("a")
+				})
+			})
+		})
+	})
+
 }
 
 var PayloadBodyInlineRecursiveUserDSL = func() {
@@ -2641,6 +2975,239 @@ var WithParamsAndHeadersBlockDSL = func() {
 					Header("required", String)
 					Header("optional_but_required_header", Float32)
 					Required("optional_but_required_header")
+				})
+			})
+		})
+	})
+}
+
+var MultipleServicesSamePayloadAndResultDSL = func() {
+	Service("ServiceA", func() {
+		Method("list", func() {
+			Payload(func() {
+				Attribute("name", String)
+			})
+			StreamingPayload(func() {
+				Attribute("name", String)
+			})
+			Result(func() {
+				Attribute("id", Int)
+				Attribute("name", String)
+				Required("id", "name")
+			})
+			Error("something_went_wrong")
+			HTTP(func() {
+				GET("/{name}")
+				Response(StatusOK)
+				Response("something_went_wrong", StatusInternalServerError)
+			})
+		})
+	})
+	Service("ServiceB", func() {
+		Method("list", func() {
+			Payload(func() {
+				Attribute("name", String)
+			})
+			StreamingPayload(func() {
+				Attribute("name", String)
+			})
+			Result(func() {
+				Attribute("id", Int)
+				Attribute("name", String)
+				Required("id", "name")
+			})
+			Error("something_went_wrong")
+			HTTP(func() {
+				GET("/{name}")
+				Response(StatusOK)
+				Response(StatusInternalServerError, "something_went_wrong")
+			})
+		})
+	})
+}
+
+var QueryIntAliasDSL = func() {
+	var IntAlias = Type("IntAlias", Int)
+	var Int32Alias = Type("Int32Alias", Int32)
+	var Int64Alias = Type("Int64Alias", Int64)
+	Service("ServiceQueryIntAlias", func() {
+		Method("MethodA", func() {
+			Payload(func() {
+				Attribute("int", IntAlias)
+				Attribute("int32", Int32Alias)
+				Attribute("int64", Int64Alias)
+			})
+			HTTP(func() {
+				POST("/")
+				Params(func() {
+					Param("int")
+					Param("int32")
+					Param("int64")
+				})
+			})
+		})
+	})
+}
+
+var HeaderIntAliasDSL = func() {
+	var IntAlias = Type("IntAlias", Int)
+	var Int32Alias = Type("Int32Alias", Int32)
+	var Int64Alias = Type("Int64Alias", Int64)
+	Service("ServiceHeaderIntAlias", func() {
+		Method("MethodA", func() {
+			Payload(func() {
+				Attribute("int", IntAlias)
+				Attribute("int32", Int32Alias)
+				Attribute("int64", Int64Alias)
+			})
+			HTTP(func() {
+				POST("/")
+				Headers(func() {
+					Header("int")
+					Header("int32")
+					Header("int64")
+				})
+			})
+		})
+	})
+}
+
+var PathIntAliasDSL = func() {
+	var IntAlias = Type("IntAlias", Int)
+	var Int32Alias = Type("Int32Alias", Int32)
+	var Int64Alias = Type("Int64Alias", Int64)
+	Service("ServicePathIntAlias", func() {
+		Method("MethodA", func() {
+			Payload(func() {
+				Attribute("int", IntAlias)
+				Attribute("int32", Int32Alias)
+				Attribute("int64", Int64Alias)
+			})
+			HTTP(func() {
+				POST("/{int}/{int32}/{int64}")
+			})
+		})
+	})
+}
+
+var QueryIntAliasValidateDSL = func() {
+	var IntAlias = Type("IntAlias", Int, func() {
+		Minimum(10)
+	})
+	var Int32Alias = Type("Int32Alias", Int32, func() {
+		Maximum(100)
+	})
+	var Int64Alias = Type("Int64Alias", Int64, func() {
+		Minimum(0)
+	})
+	Service("ServiceQueryIntAliasValidate", func() {
+		Method("MethodA", func() {
+			Payload(func() {
+				Attribute("int", IntAlias)
+				Attribute("int32", Int32Alias)
+				Attribute("int64", Int64Alias)
+			})
+			HTTP(func() {
+				POST("/")
+				Params(func() {
+					Param("int")
+					Param("int32")
+					Param("int64")
+				})
+			})
+		})
+	})
+}
+
+var QueryArrayAliasDSL = func() {
+	var ArrayAlias = Type("ArrayAlias", ArrayOf(UInt))
+	Service("ServiceQueryArrayAlias", func() {
+		Method("MethodA", func() {
+			Payload(func() {
+				Attribute("array", ArrayAlias)
+			})
+			HTTP(func() {
+				POST("/")
+				Params(func() {
+					Param("array")
+				})
+			})
+		})
+	})
+}
+
+var QueryArrayAliasValidateDSL = func() {
+	var ArrayAlias = Type("ArrayAlias", ArrayOf(UInt), func() {
+		MinLength(3)
+		Elem(func() {
+			Minimum(10)
+		})
+	})
+	Service("ServiceQueryArrayAliasValidate", func() {
+		Method("MethodA", func() {
+			Payload(func() {
+				Attribute("array", ArrayAlias)
+			})
+			HTTP(func() {
+				POST("/")
+				Params(func() {
+					Param("array")
+				})
+			})
+		})
+	})
+}
+
+var QueryMapAliasDSL = func() {
+	var MapAlias = Type("MapAlias", MapOf(Float32, Boolean))
+	Service("ServiceQueryMapAlias", func() {
+		Method("MethodA", func() {
+			Payload(func() {
+				Attribute("map", MapAlias)
+			})
+			HTTP(func() {
+				POST("/")
+				Params(func() {
+					Param("map")
+				})
+			})
+		})
+	})
+}
+
+var QueryMapAliasValidateDSL = func() {
+	var MapAlias = Type("MapAlias", MapOf(Float32, Boolean), func() {
+		MinLength(5)
+	})
+	Service("ServiceQueryMapAliasValidate", func() {
+		Method("MethodA", func() {
+			Payload(func() {
+				Attribute("map", MapAlias)
+			})
+			HTTP(func() {
+				POST("/")
+				Params(func() {
+					Param("map")
+				})
+			})
+		})
+	})
+}
+
+var QueryArrayNestedAliasValidateDSL = func() {
+	var Float64Alias = Type("Float64Alias", Float64, func() {
+		Minimum(10)
+	})
+	var ArrayAlias = Type("ArrayAlias", ArrayOf(Float64Alias))
+	Service("ServiceQueryArrayAliasValidate", func() {
+		Method("MethodA", func() {
+			Payload(func() {
+				Attribute("array", ArrayAlias)
+			})
+			HTTP(func() {
+				POST("/")
+				Params(func() {
+					Param("array")
 				})
 			})
 		})

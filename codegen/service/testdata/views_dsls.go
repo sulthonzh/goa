@@ -169,6 +169,71 @@ var ResultWithRecursiveResultTypeDSL = func() {
 	})
 }
 
+var ResultWithRecursiveCollectionOfResultTypeDSL = func() {
+	var SomeRT = ResultType("application/vnd.some_result", func() {
+		TypeName("SomeRT")
+		Attributes(func() {
+			Attribute("a", CollectionOf("SomeRT"))
+			Required("a")
+		})
+		View("default", func() {
+			Attribute("a", func() {
+				View("tiny")
+			})
+		})
+		View("tiny", func() {
+			Attribute("a")
+		})
+	})
+	var AnotherRT = ResultType("application/vnd.another_result", func() {
+		Attributes(func() {
+			Attribute("a", CollectionOf("application/vnd.another_result"))
+			Required("a")
+		})
+	})
+	Service("ResultWithRecursiveCollectionOfResultType", func() {
+		Method("A", func() {
+			Result(SomeRT)
+		})
+		Method("B", func() {
+			Result(AnotherRT)
+		})
+	})
+}
+
+var ResultWithMultipleMethodsDSL = func() {
+	var RT = ResultType("application/vnd.some_result", func() {
+		TypeName("RT")
+		Attributes(func() {
+			Attribute("a")
+		})
+	})
+	Service("ResultWithMultipleMethods", func() {
+		Method("A", func() {
+			Result(RT)
+		})
+		Method("B", func() {
+			Result(RT)
+		})
+	})
+}
+
+var ResultWithEnumTypeDSL = func() {
+	var T = Type("UserType", String, func()  {
+		Enum("a", "b")
+	})
+	var RT = ResultType("application/vnd.result", func() {
+		Attributes(func() {
+			Attribute("t", ArrayOf(T))
+		})
+	})
+	Service("ResultWithEnumType", func() {
+		Method("A", func() {
+			Result(RT)
+		})
+	})
+}
+
 var ResultWithCustomFieldsDSL = func() {
 	var RT = ResultType("application/vnd.result", func() {
 		TypeName("RT")

@@ -32,24 +32,14 @@ type ResultWithSpace struct {
 // NewResultWithSpace initializes result type ResultWithSpace from viewed
 // result type ResultWithSpace.
 func NewResultWithSpace(vres *servicewithspacesviews.ResultWithSpace) *ResultWithSpace {
-	var res *ResultWithSpace
-	switch vres.View {
-	case "default", "":
-		res = newResultWithSpace(vres.Projected)
-	}
-	return res
+	return newResultWithSpace(vres.Projected)
 }
 
 // NewViewedResultWithSpace initializes viewed result type ResultWithSpace from
 // result type ResultWithSpace using the given view.
 func NewViewedResultWithSpace(res *ResultWithSpace, view string) *servicewithspacesviews.ResultWithSpace {
-	var vres *servicewithspacesviews.ResultWithSpace
-	switch view {
-	case "default", "":
-		p := newResultWithSpaceView(res)
-		vres = &servicewithspacesviews.ResultWithSpace{p, "default"}
-	}
-	return vres
+	p := newResultWithSpaceView(res)
+	return &servicewithspacesviews.ResultWithSpace{Projected: p, View: "default"}
 }
 
 // newResultWithSpace converts projected type ResultWithSpace to service type
@@ -372,6 +362,38 @@ func (e *Result) ErrorName() string {
 }
 `
 
+const CustomErrorsCustomField = `
+// Service is the CustomErrorsCustomFields service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context) (err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "CustomErrorsCustomFields"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [1]string{"A"}
+
+type GoaError struct {
+	ErrorCode string
+}
+
+// Error returns an error description.
+func (e *GoaError) Error() string {
+	return ""
+}
+
+// ErrorName returns "GoaError".
+func (e *GoaError) ErrorName() string {
+	return e.ErrorCode
+}
+`
+
 const MultipleMethodsResultMultipleViews = `
 // Service is the MultipleMethodsResultMultipleViews service interface.
 type Service interface {
@@ -438,10 +460,10 @@ func NewViewedMultipleViews(res *MultipleViews, view string) *multiplemethodsres
 	switch view {
 	case "default", "":
 		p := newMultipleViewsView(res)
-		vres = &multiplemethodsresultmultipleviewsviews.MultipleViews{p, "default"}
+		vres = &multiplemethodsresultmultipleviewsviews.MultipleViews{Projected: p, View: "default"}
 	case "tiny":
 		p := newMultipleViewsViewTiny(res)
-		vres = &multiplemethodsresultmultipleviewsviews.MultipleViews{p, "tiny"}
+		vres = &multiplemethodsresultmultipleviewsviews.MultipleViews{Projected: p, View: "tiny"}
 	}
 	return vres
 }
@@ -449,24 +471,14 @@ func NewViewedMultipleViews(res *MultipleViews, view string) *multiplemethodsres
 // NewSingleView initializes result type SingleView from viewed result type
 // SingleView.
 func NewSingleView(vres *multiplemethodsresultmultipleviewsviews.SingleView) *SingleView {
-	var res *SingleView
-	switch vres.View {
-	case "default", "":
-		res = newSingleView(vres.Projected)
-	}
-	return res
+	return newSingleView(vres.Projected)
 }
 
 // NewViewedSingleView initializes viewed result type SingleView from result
 // type SingleView using the given view.
 func NewViewedSingleView(res *SingleView, view string) *multiplemethodsresultmultipleviewsviews.SingleView {
-	var vres *multiplemethodsresultmultipleviewsviews.SingleView
-	switch view {
-	case "default", "":
-		p := newSingleViewView(res)
-		vres = &multiplemethodsresultmultipleviewsviews.SingleView{p, "default"}
-	}
-	return vres
+	p := newSingleViewView(res)
+	return &multiplemethodsresultmultipleviewsviews.SingleView{Projected: p, View: "default"}
 }
 
 // newMultipleViews converts projected type MultipleViews to service type
@@ -527,6 +539,106 @@ func newSingleViewView(res *SingleView) *multiplemethodsresultmultipleviewsviews
 }
 `
 
+const WithExplicitAndDefaultViews = `
+// Service is the WithExplicitAndDefaultViews service interface.
+type Service interface {
+	// A implements A.
+	// The "view" return value must have one of the following views
+	//	- "default"
+	//	- "tiny"
+	A(context.Context) (res *MultipleViews, view string, err error)
+	// A implements A.
+	AEndpoint(context.Context) (res *MultipleViews, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "WithExplicitAndDefaultViews"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [2]string{"A", "A"}
+
+// MultipleViews is the result type of the WithExplicitAndDefaultViews service
+// A method.
+type MultipleViews struct {
+	A string
+	B int
+}
+
+// NewMultipleViews initializes result type MultipleViews from viewed result
+// type MultipleViews.
+func NewMultipleViews(vres *withexplicitanddefaultviewsviews.MultipleViews) *MultipleViews {
+	var res *MultipleViews
+	switch vres.View {
+	case "default", "":
+		res = newMultipleViews(vres.Projected)
+	case "tiny":
+		res = newMultipleViewsTiny(vres.Projected)
+	}
+	return res
+}
+
+// NewViewedMultipleViews initializes viewed result type MultipleViews from
+// result type MultipleViews using the given view.
+func NewViewedMultipleViews(res *MultipleViews, view string) *withexplicitanddefaultviewsviews.MultipleViews {
+	var vres *withexplicitanddefaultviewsviews.MultipleViews
+	switch view {
+	case "default", "":
+		p := newMultipleViewsView(res)
+		vres = &withexplicitanddefaultviewsviews.MultipleViews{Projected: p, View: "default"}
+	case "tiny":
+		p := newMultipleViewsViewTiny(res)
+		vres = &withexplicitanddefaultviewsviews.MultipleViews{Projected: p, View: "tiny"}
+	}
+	return vres
+}
+
+// newMultipleViews converts projected type MultipleViews to service type
+// MultipleViews.
+func newMultipleViews(vres *withexplicitanddefaultviewsviews.MultipleViewsView) *MultipleViews {
+	res := &MultipleViews{}
+	if vres.A != nil {
+		res.A = *vres.A
+	}
+	if vres.B != nil {
+		res.B = *vres.B
+	}
+	return res
+}
+
+// newMultipleViewsTiny converts projected type MultipleViews to service type
+// MultipleViews.
+func newMultipleViewsTiny(vres *withexplicitanddefaultviewsviews.MultipleViewsView) *MultipleViews {
+	res := &MultipleViews{}
+	if vres.A != nil {
+		res.A = *vres.A
+	}
+	return res
+}
+
+// newMultipleViewsView projects result type MultipleViews to projected type
+// MultipleViewsView using the "default" view.
+func newMultipleViewsView(res *MultipleViews) *withexplicitanddefaultviewsviews.MultipleViewsView {
+	vres := &withexplicitanddefaultviewsviews.MultipleViewsView{
+		A: &res.A,
+		B: &res.B,
+	}
+	return vres
+}
+
+// newMultipleViewsViewTiny projects result type MultipleViews to projected
+// type MultipleViewsView using the "tiny" view.
+func newMultipleViewsViewTiny(res *MultipleViews) *withexplicitanddefaultviewsviews.MultipleViewsView {
+	vres := &withexplicitanddefaultviewsviews.MultipleViewsView{
+		A: &res.A,
+	}
+	return vres
+}
+`
+
 const ResultCollectionMultipleViewsMethod = `
 // Service is the ResultCollectionMultipleViewsMethod service interface.
 type Service interface {
@@ -577,10 +689,10 @@ func NewViewedMultipleViewsCollection(res MultipleViewsCollection, view string) 
 	switch view {
 	case "default", "":
 		p := newMultipleViewsCollectionView(res)
-		vres = resultcollectionmultipleviewsmethodviews.MultipleViewsCollection{p, "default"}
+		vres = resultcollectionmultipleviewsmethodviews.MultipleViewsCollection{Projected: p, View: "default"}
 	case "tiny":
 		p := newMultipleViewsCollectionViewTiny(res)
-		vres = resultcollectionmultipleviewsmethodviews.MultipleViewsCollection{p, "tiny"}
+		vres = resultcollectionmultipleviewsmethodviews.MultipleViewsCollection{Projected: p, View: "tiny"}
 	}
 	return vres
 }
@@ -721,10 +833,10 @@ func NewViewedMultipleViews(res *MultipleViews, view string) *resultwithotherres
 	switch view {
 	case "default", "":
 		p := newMultipleViewsView(res)
-		vres = &resultwithotherresultviews.MultipleViews{p, "default"}
+		vres = &resultwithotherresultviews.MultipleViews{Projected: p, View: "default"}
 	case "tiny":
 		p := newMultipleViewsViewTiny(res)
-		vres = &resultwithotherresultviews.MultipleViews{p, "tiny"}
+		vres = &resultwithotherresultviews.MultipleViews{Projected: p, View: "tiny"}
 	}
 	return vres
 }
@@ -873,13 +985,13 @@ func NewViewedRT(res *RT, view string) *resultwithresulttypecollectionviews.RT {
 	switch view {
 	case "default", "":
 		p := newRTView(res)
-		vres = &resultwithresulttypecollectionviews.RT{p, "default"}
+		vres = &resultwithresulttypecollectionviews.RT{Projected: p, View: "default"}
 	case "extended":
 		p := newRTViewExtended(res)
-		vres = &resultwithresulttypecollectionviews.RT{p, "extended"}
+		vres = &resultwithresulttypecollectionviews.RT{Projected: p, View: "extended"}
 	case "tiny":
 		p := newRTViewTiny(res)
-		vres = &resultwithresulttypecollectionviews.RT{p, "tiny"}
+		vres = &resultwithresulttypecollectionviews.RT{Projected: p, View: "tiny"}
 	}
 	return vres
 }
@@ -1067,6 +1179,72 @@ func newRT2ViewTiny(res *RT2) *resultwithresulttypecollectionviews.RT2View {
 }
 `
 
+const ResultWithDashedMimeTypeMethod = `
+// Service is the ResultWithDashedMimeType service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context) (res *ApplicationDashedType, err error)
+	// List implements list.
+	List(context.Context) (res *ListResult, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "ResultWithDashedMimeType"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [2]string{"A", "list"}
+
+// ApplicationDashedType is the result type of the ResultWithDashedMimeType
+// service A method.
+type ApplicationDashedType struct {
+	Name *string
+}
+
+// ListResult is the result type of the ResultWithDashedMimeType service list
+// method.
+type ListResult struct {
+	Items ApplicationDashedTypeCollection
+}
+
+type ApplicationDashedTypeCollection []*ApplicationDashedType
+
+// NewApplicationDashedType initializes result type ApplicationDashedType from
+// viewed result type ApplicationDashedType.
+func NewApplicationDashedType(vres *resultwithdashedmimetypeviews.ApplicationDashedType) *ApplicationDashedType {
+	return newApplicationDashedType(vres.Projected)
+}
+
+// NewViewedApplicationDashedType initializes viewed result type
+// ApplicationDashedType from result type ApplicationDashedType using the given
+// view.
+func NewViewedApplicationDashedType(res *ApplicationDashedType, view string) *resultwithdashedmimetypeviews.ApplicationDashedType {
+	p := newApplicationDashedTypeView(res)
+	return &resultwithdashedmimetypeviews.ApplicationDashedType{Projected: p, View: "default"}
+}
+
+// newApplicationDashedType converts projected type ApplicationDashedType to
+// service type ApplicationDashedType.
+func newApplicationDashedType(vres *resultwithdashedmimetypeviews.ApplicationDashedTypeView) *ApplicationDashedType {
+	res := &ApplicationDashedType{
+		Name: vres.Name,
+	}
+	return res
+}
+
+// newApplicationDashedTypeView projects result type ApplicationDashedType to
+// projected type ApplicationDashedTypeView using the "default" view.
+func newApplicationDashedTypeView(res *ApplicationDashedType) *resultwithdashedmimetypeviews.ApplicationDashedTypeView {
+	vres := &resultwithdashedmimetypeviews.ApplicationDashedTypeView{
+		Name: res.Name,
+	}
+	return vres
+}
+`
+
 const ForceGenerateType = `
 // Service is the ForceGenerateType service interface.
 type Service interface {
@@ -1230,10 +1408,10 @@ func NewViewedMultipleViews(res *MultipleViews, view string) *streamingresultwit
 	switch view {
 	case "default", "":
 		p := newMultipleViewsView(res)
-		vres = &streamingresultwithviewsserviceviews.MultipleViews{p, "default"}
+		vres = &streamingresultwithviewsserviceviews.MultipleViews{Projected: p, View: "default"}
 	case "tiny":
 		p := newMultipleViewsViewTiny(res)
-		vres = &streamingresultwithviewsserviceviews.MultipleViews{p, "tiny"}
+		vres = &streamingresultwithviewsserviceviews.MultipleViews{Projected: p, View: "tiny"}
 	}
 	return vres
 }
@@ -1339,10 +1517,10 @@ func NewViewedMultipleViews(res *MultipleViews, view string) *streamingresultwit
 	switch view {
 	case "default", "":
 		p := newMultipleViewsView(res)
-		vres = &streamingresultwithexplicitviewserviceviews.MultipleViews{p, "default"}
+		vres = &streamingresultwithexplicitviewserviceviews.MultipleViews{Projected: p, View: "default"}
 	case "tiny":
 		p := newMultipleViewsViewTiny(res)
-		vres = &streamingresultwithexplicitviewserviceviews.MultipleViews{p, "tiny"}
+		vres = &streamingresultwithexplicitviewserviceviews.MultipleViews{Projected: p, View: "tiny"}
 	}
 	return vres
 }
@@ -1661,10 +1839,10 @@ func NewViewedMultipleViews(res *MultipleViews, view string) *streamingpayloadre
 	switch view {
 	case "default", "":
 		p := newMultipleViewsView(res)
-		vres = &streamingpayloadresultwithviewsserviceviews.MultipleViews{p, "default"}
+		vres = &streamingpayloadresultwithviewsserviceviews.MultipleViews{Projected: p, View: "default"}
 	case "tiny":
 		p := newMultipleViewsViewTiny(res)
-		vres = &streamingpayloadresultwithviewsserviceviews.MultipleViews{p, "tiny"}
+		vres = &streamingpayloadresultwithviewsserviceviews.MultipleViews{Projected: p, View: "tiny"}
 	}
 	return vres
 }
@@ -1776,10 +1954,10 @@ func NewViewedMultipleViews(res *MultipleViews, view string) *streamingpayloadre
 	switch view {
 	case "default", "":
 		p := newMultipleViewsView(res)
-		vres = &streamingpayloadresultwithexplicitviewserviceviews.MultipleViews{p, "default"}
+		vres = &streamingpayloadresultwithexplicitviewserviceviews.MultipleViews{Projected: p, View: "default"}
 	case "tiny":
 		p := newMultipleViewsViewTiny(res)
-		vres = &streamingpayloadresultwithexplicitviewserviceviews.MultipleViews{p, "tiny"}
+		vres = &streamingpayloadresultwithexplicitviewserviceviews.MultipleViews{Projected: p, View: "tiny"}
 	}
 	return vres
 }
@@ -2031,10 +2209,10 @@ func NewViewedMultipleViews(res *MultipleViews, view string) *bidirectionalstrea
 	switch view {
 	case "default", "":
 		p := newMultipleViewsView(res)
-		vres = &bidirectionalstreamingresultwithviewsserviceviews.MultipleViews{p, "default"}
+		vres = &bidirectionalstreamingresultwithviewsserviceviews.MultipleViews{Projected: p, View: "default"}
 	case "tiny":
 		p := newMultipleViewsViewTiny(res)
-		vres = &bidirectionalstreamingresultwithviewsserviceviews.MultipleViews{p, "tiny"}
+		vres = &bidirectionalstreamingresultwithviewsserviceviews.MultipleViews{Projected: p, View: "tiny"}
 	}
 	return vres
 }
@@ -2149,10 +2327,10 @@ func NewViewedMultipleViews(res *MultipleViews, view string) *bidirectionalstrea
 	switch view {
 	case "default", "":
 		p := newMultipleViewsView(res)
-		vres = &bidirectionalstreamingresultwithexplicitviewserviceviews.MultipleViews{p, "default"}
+		vres = &bidirectionalstreamingresultwithexplicitviewserviceviews.MultipleViews{Projected: p, View: "default"}
 	case "tiny":
 		p := newMultipleViewsViewTiny(res)
-		vres = &bidirectionalstreamingresultwithexplicitviewserviceviews.MultipleViews{p, "tiny"}
+		vres = &bidirectionalstreamingresultwithexplicitviewserviceviews.MultipleViews{Projected: p, View: "tiny"}
 	}
 	return vres
 }

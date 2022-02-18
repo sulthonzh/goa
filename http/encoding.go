@@ -19,6 +19,7 @@ const (
 	// request Accept-Type header. The value may be used by encoders and
 	// decoders to implement a content type negotiation algorithm.
 	AcceptTypeKey contextKey = iota + 1
+
 	// ContentTypeKey is the context key used to store the value of the HTTP
 	// response Content-Type header when explicitly set in the DSL. The value
 	// may be used by encoders to set the header appropriately.
@@ -54,6 +55,7 @@ type (
 //     * application/json using package encoding/json
 //     * application/xml using package encoding/xml
 //     * application/gob using package encoding/gob
+//     * text/html and text/plain for strings
 //
 // RequestDecoder defaults to the JSON decoder if the request "Content-Type"
 // header does not match any of the supported mime type or is missing
@@ -76,6 +78,8 @@ func RequestDecoder(r *http.Request) Decoder {
 		return gob.NewDecoder(r.Body)
 	case "application/xml":
 		return xml.NewDecoder(r.Body)
+	case "text/html", "text/plain":
+		return newTextDecoder(r.Body, contentType)
 	default:
 		return json.NewDecoder(r.Body)
 	}
@@ -131,15 +135,15 @@ func ResponseEncoder(ctx context.Context, w http.ResponseWriter) Encoder {
 			// from the content type context key.
 			if mt, _, err = mime.ParseMediaType(ct); err == nil {
 				switch {
-				case ct == "application/json" || strings.HasSuffix(ct, "+json"):
+				case mt == "application/json" || strings.HasSuffix(mt, "+json"):
 					enc = json.NewEncoder(w)
-				case ct == "application/xml" || strings.HasSuffix(ct, "+xml"):
+				case mt == "application/xml" || strings.HasSuffix(mt, "+xml"):
 					enc = xml.NewEncoder(w)
-				case ct == "application/gob" || strings.HasSuffix(ct, "+gob"):
+				case mt == "application/gob" || strings.HasSuffix(mt, "+gob"):
 					enc = gob.NewEncoder(w)
-				case ct == "text/html" || ct == "text/plain" ||
-					strings.HasSuffix(ct, "+html") || strings.HasSuffix(ct, "+txt"):
-					enc = newTextEncoder(w, ct)
+				case mt == "text/html" || mt == "text/plain" ||
+					strings.HasSuffix(mt, "+html") || strings.HasSuffix(mt, "+txt"):
+					enc = newTextEncoder(w, mt)
 				default:
 					enc = json.NewEncoder(w)
 				}
@@ -166,6 +170,10 @@ func ResponseEncoder(ctx context.Context, w http.ResponseWriter) Encoder {
 // RequestEncoder returns a HTTP request encoder.
 // The encoder uses package encoding/json.
 func RequestEncoder(r *http.Request) Encoder {
+	const k = "Content-Type"
+	if h := r.Header.Get(k); h == "" {
+		r.Header.Set(k, "application/json")
+	}
 	var buf bytes.Buffer
 	r.Body = ioutil.NopCloser(&buf)
 	return json.NewEncoder(&buf)
@@ -203,15 +211,19 @@ func ResponseDecoder(resp *http.Response) Decoder {
 }
 
 // ErrorEncoder returns an encoder that encodes errors returned by service
-// methods. The encoder checks whether the error is a goa ServiceError struct
-// and if so uses the error temporary and timeout fields to infer a proper HTTP
-// status code and marshals the error struct to the body using the provided
-// encoder. If the error is not a goa ServiceError struct then it is encoded
-// as a permanent internal server error.
-func ErrorEncoder(encoder func(context.Context, http.ResponseWriter) Encoder) func(context.Context, http.ResponseWriter, error) error {
+// methods. The default encoder checks whether the error is a goa ServiceError
+// struct and if so uses the error temporary and timeout fields to infer a
+// proper HTTP status code and marshals the error struct to the body using the
+// provided encoder. If the error is not a goa ServiceError struct then it is
+// encoded as a permanent internal server error. This behavior as well as the
+// shape of the response can be overridden by providing a non-nil formatter.
+func ErrorEncoder(encoder func(context.Context, http.ResponseWriter) Encoder, formatter func(err error) Statuser) func(context.Context, http.ResponseWriter, error) error {
 	return func(ctx context.Context, w http.ResponseWriter, err error) error {
 		enc := encoder(ctx, w)
-		resp := NewErrorResponse(err)
+		if formatter == nil {
+			formatter = NewErrorResponse
+		}
+		resp := formatter(err)
 		w.WriteHeader(resp.StatusCode())
 		return enc.Encode(resp)
 	}
@@ -258,9 +270,7 @@ type textEncoder struct {
 	ct string
 }
 
-func (e *textEncoder) Encode(v interface{}) error {
-	var err error
-
+func (e *textEncoder) Encode(v interface{}) (err error) {
 	switch c := v.(type) {
 	case string:
 		_, err = e.w.Write([]byte(c))
@@ -271,8 +281,7 @@ func (e *textEncoder) Encode(v interface{}) error {
 	default:
 		err = fmt.Errorf("can't encode %T as %s", c, e.ct)
 	}
-
-	return err
+	return
 }
 
 func newTextDecoder(r io.Reader, ct string) Decoder {
@@ -289,15 +298,13 @@ func (e *textDecoder) Decode(v interface{}) error {
 	if err != nil {
 		return err
 	}
-
 	switch c := v.(type) {
 	case *string:
 		*c = string(b)
 	case *[]byte:
-		*c = []byte(string(b))
+		*c = b
 	default:
-		err = fmt.Errorf("can't decode %s to %T", e.ct, c)
+		return fmt.Errorf("can't decode %s to %T", e.ct, c)
 	}
-
-	return err
+	return nil
 }

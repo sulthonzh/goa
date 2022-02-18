@@ -34,7 +34,7 @@ func client(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File {
 		data = GRPCServices.Get(svc.Name())
 	)
 	{
-		svcName := codegen.SnakeCase(data.Service.VarName)
+		svcName := data.Service.PathName
 		fpath = filepath.Join(codegen.Gendir, "grpc", svcName, "client", "client.go")
 		sections = []*codegen.SectionTemplate{
 			codegen.Header(svc.Name()+" gRPC client", "client", []*codegen.ImportSpec{
@@ -118,12 +118,14 @@ func clientEncodeDecode(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File 
 		data = GRPCServices.Get(svc.Name())
 	)
 	{
-		svcName := codegen.SnakeCase(data.Service.VarName)
+		svcName := data.Service.PathName
 		fpath = filepath.Join(codegen.Gendir, "grpc", svcName, "client", "encode_decode.go")
 		sections = []*codegen.SectionTemplate{
 			codegen.Header(svc.Name()+" gRPC client encoders and decoders", "client", []*codegen.ImportSpec{
+				{Path: "fmt"},
 				{Path: "context"},
 				{Path: "strconv"},
+				{Path: "unicode/utf8"},
 				{Path: "google.golang.org/grpc"},
 				{Path: "google.golang.org/grpc/metadata"},
 				codegen.GoaImport(""),
@@ -241,9 +243,9 @@ func Build{{ .Method.VarName }}Func(grpccli {{ .PkgName }}.{{ .ClientInterface }
 			opts = append(opts, opt)
 		}
 		if reqpb != nil {
-			return grpccli.{{ .Method.VarName }}(ctx{{ if not .Method.StreamingPayload }}, reqpb.({{ .Request.ClientConvert.TgtRef }}){{ end }}, opts...)
+			return grpccli.{{ .ClientMethodName }}(ctx{{ if not .Method.StreamingPayload }}, reqpb.({{ .Request.ClientConvert.TgtRef }}){{ end }}, opts...)
 		}
-		return grpccli.{{ .Method.VarName }}(ctx{{ if not .Method.StreamingPayload }}, &{{ .Request.ClientConvert.TgtName }}{}{{ end }}, opts...)
+		return grpccli.{{ .ClientMethodName }}(ctx{{ if not .Method.StreamingPayload }}, &{{ .Request.ClientConvert.TgtName }}{}{{ end }}, opts...)
 	}
 }
 `

@@ -11,14 +11,15 @@ import (
 func TestProtoBufTransform(t *testing.T) {
 	root := codegen.RunDSL(t, ctestdata.TestTypesDSL)
 	var (
-		scope = codegen.NewNameScope()
+		sd = &ServiceData{Name: "Service", Scope: codegen.NewNameScope()}
 
 		// types to test
 		primitive = expr.Int
 
-		simple   = root.UserType("Simple")
-		required = root.UserType("Required")
-		defaultT = root.UserType("Default")
+		simple     = root.UserType("Simple")
+		required   = root.UserType("Required")
+		defaultT   = root.UserType("Default")
+		customtype = root.UserType("CustomTypes")
 
 		simpleMap  = root.UserType("SimpleMap")
 		nestedMap  = root.UserType("NestedMap")
@@ -41,9 +42,9 @@ func TestProtoBufTransform(t *testing.T) {
 		rtCol      = root.UserType("ResultTypeCollection")
 
 		// attribute contexts used in test cases
-		svcCtx = serviceTypeContext("", scope)
-		ptrCtx = pointerContext("", scope)
-		pbCtx  = protoBufTypeContext("", scope)
+		svcCtx = serviceTypeContext("", sd.Scope)
+		ptrCtx = pointerContext("", sd.Scope)
+		pbCtx  = protoBufTypeContext("", sd.Scope)
 	)
 
 	tc := map[string][]struct {
@@ -63,6 +64,8 @@ func TestProtoBufTransform(t *testing.T) {
 			{"simple-to-default", simple, defaultT, true, svcCtx, simpleSvcToDefaultProtoCode},
 			{"default-to-simple", defaultT, simple, true, svcCtx, defaultSvcToSimpleProtoCode},
 			{"required-ptr-to-simple", required, simple, true, ptrCtx, requiredPtrSvcToSimpleProtoCode},
+			{"simple-to-customtype", customtype, simple, true, svcCtx, customSvcToSimpleProtoCode},
+			{"customtype-to-customtype", customtype, customtype, true, svcCtx, customSvcToCustomProtoCode},
 
 			// maps
 			{"map-to-map", simpleMap, simpleMap, true, svcCtx, simpleMapSvcToSimpleMapProtoCode},
@@ -95,6 +98,8 @@ func TestProtoBufTransform(t *testing.T) {
 			{"simple-to-default", simple, defaultT, false, svcCtx, simpleProtoToDefaultSvcCode},
 			{"default-to-simple", defaultT, simple, false, svcCtx, defaultProtoToSimpleSvcCode},
 			{"simple-to-required-ptr", simple, required, false, ptrCtx, simpleProtoToRequiredPtrSvcCode},
+			{"simple-to-customtype", simple, customtype, false, svcCtx, simpleProtoToCustomSvcCode},
+			{"customtype-to-customtype", customtype, customtype, false, svcCtx, customProtoToCustomSvcCode},
 
 			// maps
 			{"map-to-map", simpleMap, simpleMap, false, svcCtx, simpleMapProtoToSimpleMapSvcCode},
@@ -127,13 +132,13 @@ func TestProtoBufTransform(t *testing.T) {
 					srcCtx := c.Ctx
 					tgtCtx := c.Ctx
 					if c.ToProto {
-						target = makeProtoBufMessage(expr.DupAtt(target), target.Type.Name(), scope)
+						target = makeProtoBufMessage(expr.DupAtt(target), target.Type.Name(), sd)
 						tgtCtx = pbCtx
 					} else {
-						source = makeProtoBufMessage(expr.DupAtt(source), source.Type.Name(), scope)
+						source = makeProtoBufMessage(expr.DupAtt(source), source.Type.Name(), sd)
 						srcCtx = pbCtx
 					}
-					code, _, err := protoBufTransform(source, target, "source", "target", srcCtx, tgtCtx, c.ToProto)
+					code, _, err := protoBufTransform(source, target, "source", "target", srcCtx, tgtCtx, c.ToProto, true)
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -227,6 +232,42 @@ const (
 	}
 }
 `
+
+	customSvcToSimpleProtoCode = `func transform() {
+	target := &Simple{
+		RequiredString: string(source.RequiredString),
+		DefaultBool:    bool(source.DefaultBool),
+	}
+	if source.Integer != nil {
+		target.Integer = int32(*source.Integer)
+	}
+}
+`
+
+	simpleProtoToCustomSvcCode = `func transform() {
+	target := &CustomTypes{
+		RequiredString: tdtypes.CustomString(source.RequiredString),
+		DefaultBool:    tdtypes.CustomBool(source.DefaultBool),
+	}
+	if source.Integer != 0 {
+		integerptr := tdtypes.CustomInt(source.Integer)
+		target.Integer = &integerptr
+	}
+}
+`
+
+	customSvcToCustomProtoCode = `func transform() {
+	target := &CustomTypes{
+		RequiredString: string(source.RequiredString),
+		DefaultBool:    bool(source.DefaultBool),
+	}
+	if source.Integer != nil {
+		target.Integer = int32(*source.Integer)
+	}
+}
+`
+
+	customProtoToCustomSvcCode = simpleProtoToCustomSvcCode
 
 	simpleMapSvcToSimpleMapProtoCode = `func transform() {
 	target := &SimpleMap{}
@@ -390,29 +431,29 @@ const (
 	compositeSvcToCustomFieldProtoCode = `func transform() {
 	target := &CompositeWithCustomField{}
 	if source.RequiredString != nil {
-		target.MyString = *source.RequiredString
+		target.RequiredString = *source.RequiredString
 	}
 	if source.DefaultInt != nil {
-		target.MyInt = int32(*source.DefaultInt)
+		target.DefaultInt = int32(*source.DefaultInt)
 	}
 	if source.DefaultInt == nil {
-		target.MyInt = 100
+		target.DefaultInt = 100
 	}
 	if source.Type != nil {
-		target.MyType = svcSimpleToSimple(source.Type)
+		target.Type = svcSimpleToSimple(source.Type)
 	}
 	if source.Map != nil {
-		target.MyMap = make(map[int32]string, len(source.Map))
+		target.Map_ = make(map[int32]string, len(source.Map))
 		for key, val := range source.Map {
 			tk := int32(key)
 			tv := val
-			target.MyMap[tk] = tv
+			target.Map_[tk] = tv
 		}
 	}
 	if source.Array != nil {
-		target.MyArray = make([]string, len(source.Array))
+		target.Array = make([]string, len(source.Array))
 		for i, val := range source.Array {
-			target.MyArray[i] = val
+			target.Array[i] = val
 		}
 	}
 }
@@ -820,26 +861,26 @@ const (
 
 	customFieldProtoToCompositeSvcCode = `func transform() {
 	target := &Composite{
-		RequiredString: &source.MyString,
+		RequiredString: &source.RequiredString,
 	}
-	if source.MyInt != 0 {
-		defaultIntptr := int(source.MyInt)
+	if source.DefaultInt != 0 {
+		defaultIntptr := int(source.DefaultInt)
 		target.DefaultInt = &defaultIntptr
 	}
-	if source.MyType != nil {
-		target.Type = protobufSimpleToSimple(source.MyType)
+	if source.Type != nil {
+		target.Type = protobufSimpleToSimple(source.Type)
 	}
-	if source.MyMap != nil {
-		target.Map = make(map[int]string, len(source.MyMap))
-		for key, val := range source.MyMap {
+	if source.Map_ != nil {
+		target.Map = make(map[int]string, len(source.Map_))
+		for key, val := range source.Map_ {
 			tk := int(key)
 			tv := val
 			target.Map[tk] = tv
 		}
 	}
-	if source.MyArray != nil {
-		target.Array = make([]string, len(source.MyArray))
-		for i, val := range source.MyArray {
+	if source.Array != nil {
+		target.Array = make([]string, len(source.Array))
+		for i, val := range source.Array {
 			target.Array[i] = val
 		}
 	}

@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"go/build"
 	"os"
 	"path"
 	"path/filepath"
@@ -87,7 +88,11 @@ func commonPath(sep byte, paths ...string) string {
 // ("goa.design/goa/vendor/some/package") for vendored packages
 // instead the source import path ("some/package")
 func getPkgImport(pkg, cwd string) string {
-	gosrc := path.Join(filepath.ToSlash(os.Getenv("GOPATH")), "src")
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		gopath = build.Default.GOPATH
+	}
+	gosrc := path.Join(filepath.ToSlash(gopath), "src")
 	cwd = filepath.ToSlash(cwd)
 
 	// check for go modules
@@ -231,11 +236,11 @@ func ConvertFile(root *expr.RootExpr, service *expr.ServiceExpr) (*codegen.File,
 		tgtPkg := t.String()
 		tgtPkg = tgtPkg[:strings.Index(tgtPkg, ".")]
 		srcCtx := typeContext("", svc.Scope)
-		tgtCtx := codegen.NewAttributeContext(false, false, false, tgtPkg, svc.Scope)
+		tgtCtx := codegen.NewAttributeContext(false, false, false, tgtPkg, codegen.NewNameScope())
 		srcAtt := &expr.AttributeExpr{Type: c.User}
 		code, tf, err := codegen.GoTransform(
 			&expr.AttributeExpr{Type: c.User}, &expr.AttributeExpr{Type: dt},
-			"t", "v", srcCtx, tgtCtx, "transform")
+			"t", "v", srcCtx, tgtCtx, "transform", true)
 		if err != nil {
 			return nil, err
 		}
@@ -269,12 +274,12 @@ func ConvertFile(root *expr.RootExpr, service *expr.ServiceExpr) (*codegen.File,
 		t := reflect.TypeOf(c.External)
 		srcPkg := t.String()
 		srcPkg = srcPkg[:strings.Index(srcPkg, ".")]
-		srcCtx := codegen.NewAttributeContext(false, false, false, srcPkg, svc.Scope)
+		srcCtx := codegen.NewAttributeContext(false, false, false, srcPkg, codegen.NewNameScope())
 		tgtCtx := typeContext("", svc.Scope)
 		tgtAtt := &expr.AttributeExpr{Type: c.User}
 		code, tf, err := codegen.GoTransform(
 			&expr.AttributeExpr{Type: dt}, tgtAtt,
-			"v", "temp", srcCtx, tgtCtx, "transform")
+			"v", "temp", srcCtx, tgtCtx, "transform", true)
 		if err != nil {
 			return nil, err
 		}
@@ -287,7 +292,7 @@ func ConvertFile(root *expr.RootExpr, service *expr.ServiceExpr) (*codegen.File,
 		}
 		data := convertData{
 			Name:            name,
-			ReceiverTypeRef: svc.Scope.GoTypeRef(tgtAtt),
+			ReceiverTypeRef: codegen.NewNameScope().GoTypeRef(tgtAtt),
 			TypeRef:         ref,
 			Code:            code,
 		}
@@ -459,6 +464,7 @@ func buildDesignType(dt *expr.DataType, t reflect.Type, ref expr.DataType, recs 
 		ut := &expr.UserTypeExpr{
 			AttributeExpr: &expr.AttributeExpr{Type: &obj},
 			TypeName:      t.Name(),
+			UID:           t.PkgPath() + "#" + t.Name(),
 		}
 		*dt = ut
 		rec.seen[t.Name()] = ut
@@ -546,6 +552,13 @@ func attributeName(obj *expr.Object, name string) (string, string) {
 	for _, nat := range *obj {
 		if nat.Name == ln {
 			return ln, name
+		}
+	}
+	// next look for a lower camel case without acronym
+	lcn := codegen.CamelCase(name, false, false)
+	for _, nat := range *obj {
+		if nat.Name == lcn {
+			return lcn, name
 		}
 	}
 	// finally look for a snake case representation

@@ -122,8 +122,8 @@ func TestAttributeExprValidate(t *testing.T) {
 
 		errAttributeTypeNil      = fmt.Errorf("attribute type is nil")
 		errRequiredFieldNotExist = fmt.Errorf(`%srequired field %q does not exist in type %s`, normalizedCtx, "foo", fieldNotExistType.Name())
-		errViewButNotAResultType = fmt.Errorf("%sdefines a view %v but type %s is not a result type", normalizedCtx, metadata["view"], notAResultType.Name())
-		errTypeNotDefineView     = fmt.Errorf("%stype %s does not define view %q", normalizedCtx, viewNotDefinedTypeName, "foo")
+		errViewButNotAResultType = fmt.Errorf("%s uses view %q but %q is not a result type", normalizedCtx, metadata["view"][0], notAResultType.Name())
+		errTypeNotDefineView     = fmt.Errorf("%s: type %q does not define view %q", normalizedCtx, viewNotDefinedTypeName, "foo")
 	)
 	cases := map[string]struct {
 		typ        DataType
@@ -613,6 +613,64 @@ func TestAttributeExprHasTag(t *testing.T) {
 	}
 }
 
+func TestAttributeExprHasTagPrefix(t *testing.T) {
+	var (
+		tag    = "security:apikey:api_key"
+		prefix = "security:apikey"
+	)
+	cases := map[string]struct {
+		attribute *AttributeExpr
+		prefix    string
+		expected  bool
+	}{
+		"has tag prefix": {
+			attribute: &AttributeExpr{
+				Type: &Object{
+					&NamedAttributeExpr{
+						Name: "foo",
+						Attribute: &AttributeExpr{
+							Meta: MetaExpr{
+								tag: []string{"key"},
+							},
+						},
+					},
+				},
+			},
+			prefix:   prefix,
+			expected: true,
+		},
+		"attribute expr is nil": {
+			attribute: nil,
+			prefix:    prefix,
+			expected:  false,
+		},
+		"not object": {
+			attribute: &AttributeExpr{
+				Type: String,
+			},
+			prefix:   prefix,
+			expected: false,
+		},
+		"object but has no tag": {
+			attribute: &AttributeExpr{
+				Type: &Object{
+					&NamedAttributeExpr{
+						Name:      "foo",
+						Attribute: &AttributeExpr{},
+					},
+				},
+			},
+			prefix: prefix,
+		},
+	}
+
+	for k, tc := range cases {
+		if actual := tc.attribute.HasTagPrefix(tc.prefix); tc.expected != actual {
+			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
+		}
+	}
+}
+
 func TestAttributeExprHasDefaultValue(t *testing.T) {
 	var (
 		object = &Object{
@@ -661,22 +719,26 @@ func TestAttributeExprHasDefaultValue(t *testing.T) {
 
 func TestValidationExprHasRequiredOnly(t *testing.T) {
 	var (
-		values    = []interface{}{"foo"}
-		pattern   = "^foo$"
-		minimum   = 1.1
-		maximum   = 2.2
-		minLength = 2
-		maxLength = 3
+		values           = []interface{}{"foo"}
+		pattern          = "^foo$"
+		exclusiveMinimum = 1.1
+		minimum          = 1.1
+		exclusiveMaximum = 2.2
+		maximum          = 2.2
+		minLength        = 2
+		maxLength        = 3
 	)
 	cases := map[string]struct {
-		values    []interface{}
-		format    ValidationFormat
-		pattern   string
-		minimum   *float64
-		maximum   *float64
-		minLength *int
-		maxLength *int
-		expected  bool
+		values           []interface{}
+		format           ValidationFormat
+		pattern          string
+		exclusiveMinimum *float64
+		minimum          *float64
+		exclusiveMaximum *float64
+		maximum          *float64
+		minLength        *int
+		maxLength        *int
+		expected         bool
 	}{
 		"has required only": {
 			expected: true,
@@ -693,9 +755,17 @@ func TestValidationExprHasRequiredOnly(t *testing.T) {
 			pattern:  pattern,
 			expected: false,
 		},
+		"exclusiveMinimum is not nil": {
+			exclusiveMinimum: &exclusiveMinimum,
+			expected:         false,
+		},
 		"minimum is not nil": {
 			minimum:  &minimum,
 			expected: false,
+		},
+		"exclusiveMaximum is not nil": {
+			exclusiveMaximum: &exclusiveMaximum,
+			expected:         false,
 		},
 		"maximum is not nil": {
 			maximum:  &maximum,
@@ -710,26 +780,30 @@ func TestValidationExprHasRequiredOnly(t *testing.T) {
 			expected:  false,
 		},
 		"complex validation": {
-			values:    values,
-			format:    FormatDate,
-			pattern:   pattern,
-			minimum:   &minimum,
-			maximum:   &maximum,
-			minLength: &minLength,
-			maxLength: &maxLength,
-			expected:  false,
+			values:           values,
+			format:           FormatDate,
+			pattern:          pattern,
+			exclusiveMinimum: &exclusiveMinimum,
+			minimum:          &minimum,
+			exclusiveMaximum: &exclusiveMaximum,
+			maximum:          &maximum,
+			minLength:        &minLength,
+			maxLength:        &maxLength,
+			expected:         false,
 		},
 	}
 
 	for k, tc := range cases {
 		validation := &ValidationExpr{
-			Values:    tc.values,
-			Format:    tc.format,
-			Pattern:   tc.pattern,
-			Minimum:   tc.minimum,
-			Maximum:   tc.maximum,
-			MinLength: tc.minLength,
-			MaxLength: tc.maxLength,
+			Values:           tc.values,
+			Format:           tc.format,
+			Pattern:          tc.pattern,
+			ExclusiveMinimum: tc.exclusiveMinimum,
+			Minimum:          tc.minimum,
+			ExclusiveMaximum: tc.exclusiveMaximum,
+			Maximum:          tc.maximum,
+			MinLength:        tc.minLength,
+			MaxLength:        tc.maxLength,
 		}
 		if actual := validation.HasRequiredOnly(); tc.expected != actual {
 			t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)

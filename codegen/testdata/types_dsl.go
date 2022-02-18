@@ -13,6 +13,20 @@ var TestTypesDSL = func() {
 			Required("required_string")
 		})
 
+		_ = Type("CustomTypes", func() {
+			Attribute("required_string", String, func() {
+				Meta("struct:field:type", "tdtypes.CustomString", "goa.design/goa/v3/codegen/testdata/tdtypes")
+			})
+			Attribute("default_bool", Boolean, func() {
+				Meta("struct:field:type", "tdtypes.CustomBool", "goa.design/goa/v3/codegen/testdata/tdtypes")
+				Default(true)
+			})
+			Attribute("integer", Int, func() {
+				Meta("struct:field:type", "tdtypes.CustomInt", "goa.design/goa/v3/codegen/testdata/tdtypes")
+			})
+			Required("required_string")
+		})
+
 		_ = Type("Required", func() {
 			Extend(Simple)
 			Required("required_string", "default_bool", "integer")
@@ -211,6 +225,32 @@ var TestTypesDSL = func() {
 				Default(map[int]string{2: "bar"})
 			})
 			Required("required_int", "required_string", "required_bytes", "required_any", "required_array", "required_map")
+		})
+
+		StringAlias = Type("StringAlias", String)
+		BoolAlias   = Type("BoolAlias", Boolean, func() {
+			Default(true)
+		})
+		IntAlias          = Type("IntAlias", Int)
+		Float32Alias      = Type("Float32Alias", Float32)
+		Float64Alias      = Type("Float64Alias", Float64)
+		Float32ArrayAlias = Type("Float32ArrayAlias", ArrayOf(Float32Alias))
+		NestedMapAlias    = Type("MapAlias", MapOf(Float64Alias, MapOf(IntAlias, MapOf(Float64Alias, UInt64))))
+		ArrayMapAlias     = Type("MapWithArrayAlias", MapOf(UInt32, Float32ArrayAlias))
+
+		_ = Type("SimpleAlias", func() {
+			Attribute("required_string", StringAlias)
+			Attribute("default_bool", BoolAlias)
+			Attribute("integer", IntAlias)
+			Required("required_string")
+		})
+
+		_ = Type("NestedMapAlias", func() {
+			Attribute("nested_map", NestedMapAlias)
+		})
+
+		_ = Type("ArrayMapAlias", func() {
+			Attribute("array_map", ArrayMapAlias)
 		})
 	)
 }

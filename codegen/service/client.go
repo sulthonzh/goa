@@ -16,7 +16,7 @@ const (
 func ClientFile(service *expr.ServiceExpr) *codegen.File {
 	svc := Services.Get(service.Name)
 	data := endpointData(service)
-	path := filepath.Join(codegen.Gendir, codegen.SnakeCase(svc.VarName), "client.go")
+	path := filepath.Join(codegen.Gendir, svc.PathName, "client.go")
 	var (
 		sections []*codegen.SectionTemplate
 	)
@@ -24,6 +24,7 @@ func ClientFile(service *expr.ServiceExpr) *codegen.File {
 		header := codegen.Header(service.Name+" client", svc.PkgName,
 			[]*codegen.ImportSpec{
 				{Path: "context"},
+				{Path: "io"},
 				codegen.GoaImport(""),
 			})
 		def := &codegen.SectionTemplate{
@@ -79,18 +80,27 @@ const serviceClientMethodT = `
 	{{- end }}
 //	- error: internal error
 {{- end }}
-func (c *{{ .ClientVarName }}) {{ .VarName }}(ctx context.Context, {{ if .PayloadRef }}p {{ .PayloadRef }}{{ end }}) ({{ if .ClientStream }}res {{ .ClientStream.Interface }}, {{ else if .ResultRef }}res {{ .ResultRef }}, {{ end }}err error) {
-	{{- if .ResultRef }}
+{{- $resultType := .ResultRef }}
+{{- if .ClientStream }}
+	{{- $resultType = .ClientStream.Interface }}
+{{- end }}
+func (c *{{ .ClientVarName }}) {{ .VarName }}(ctx context.Context, {{ if .PayloadRef }}p {{ .PayloadRef }}{{ end }}{{ if .MethodData.SkipRequestBodyEncodeDecode}}, req io.ReadCloser{{ end }}) ({{ if $resultType }}res {{ $resultType }}, {{ end }}{{ if .MethodData.SkipResponseBodyEncodeDecode }}resp io.ReadCloser, {{ end }}err error) {
+	{{- if or $resultType .MethodData.SkipResponseBodyEncodeDecode }}
 	var ires interface{}
 	{{- end }}
-	{{ if .ResultRef }}ires{{ else }}_{{ end }}, err = c.{{ .VarName}}Endpoint(ctx, {{ if .PayloadRef }}p{{ else }}nil{{ end }})
-	{{- if not .ResultRef }}
+	{{ if or $resultType .MethodData.SkipResponseBodyEncodeDecode }}ires{{ else }}_{{ end }}, err = c.{{ .VarName}}Endpoint(ctx, {{ if .MethodData.SkipRequestBodyEncodeDecode }}&{{ .RequestStruct }}{ {{ if .PayloadRef }}Payload: p, {{ end }}Body: req }{{ else if .PayloadRef }}p{{ else }}nil{{ end }})
+	{{- if not (or $resultType .MethodData.SkipResponseBodyEncodeDecode) }}
 	return
 	{{- else }}
 	if err != nil {
 		return
 	}
-	return ires.({{ if .ClientStream }}{{ .ClientStream.Interface }}{{ else }}{{ .ResultRef }}{{ end }}), nil
+		{{- if .MethodData.SkipResponseBodyEncodeDecode }}
+	o := ires.(*{{ .MethodData.ResponseStruct }})
+	return {{ if .ResultRef }}o.Result, {{ end }}o.Body, nil
+		{{- else }}
+	return ires.({{ $resultType }}), nil
+		{{- end }}
 	{{- end }}
 }
 `

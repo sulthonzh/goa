@@ -24,7 +24,7 @@ func main() {
 
 		switch os.Args[1] {
 		case "version":
-			fmt.Println("goa version " + goa.Version())
+			fmt.Println("Goa version " + goa.Version())
 			os.Exit(0)
 		case "gen", "example":
 			if len(os.Args) == 2 {
@@ -107,12 +107,12 @@ fail:
 }
 
 func help() {
-	fmt.Fprint(os.Stderr, `goa is the code generation tool for the goa framework.
+	fmt.Fprint(os.Stderr, `goa is the code generation tool for the Goa framework.
 Learn more at https://goa.design.
 
 Usage:
-  goa gen PACKAGE [--out DIRECTORY] [--debug]
-  goa example PACKAGE [--out DIRECTORY] [--debug]
+  goa gen PACKAGE [--output DIRECTORY] [--debug]
+  goa example PACKAGE [--output DIRECTORY] [--debug]
   goa version
 
 Commands:
@@ -121,7 +121,7 @@ Commands:
   example
         Generate example server and client tool.
   version
-        Print version information (exclusive with other flags and commands).
+        Print version information.
 
 Args:
   PACKAGE
@@ -132,11 +132,11 @@ Flags:
         output directory, defaults to the current working directory
 
   -debug
-        Print debug information (mainly intended for goa developers)
+        Print debug information (mainly intended for Goa developers)
 
 Example:
 
-  goa gen goa.design/cellar/design -o gendir
+  goa gen goa.design/examples/cellar/design -o gendir
 
 `)
 	os.Exit(1)

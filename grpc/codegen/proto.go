@@ -27,12 +27,12 @@ func ProtoFiles(genpkg string, root *expr.RootExpr) []*codegen.File {
 
 func protoFile(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File {
 	data := GRPCServices.Get(svc.Name())
-	svcName := codegen.SnakeCase(data.Service.VarName)
-	path := filepath.Join(codegen.Gendir, "grpc", svcName, pbPkgName, svcName+".proto")
+	svcName := data.Service.PathName
+	path := filepath.Join(codegen.Gendir, "grpc", svcName, pbPkgName, "goadesign_goagen_"+svcName+".proto")
 
 	sections := []*codegen.SectionTemplate{
 		// header comments
-		&codegen.SectionTemplate{
+		{
 			Name:   "proto-header",
 			Source: protoHeaderT,
 			Data: map[string]interface{}{
@@ -41,16 +41,20 @@ func protoFile(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File {
 			},
 		},
 		// proto syntax and package
-		&codegen.SectionTemplate{
+		{
 			Name:   "proto-start",
 			Source: protoStartT,
 			Data: map[string]interface{}{
 				"ProtoVersion": ProtoVersion,
-				"Pkg":          codegen.SnakeCase(codegen.Goify(svcName, false)),
+				"Pkg":          pkgName(svc, svcName),
 			},
 		},
 		// service definition
-		&codegen.SectionTemplate{Name: "grpc-service", Source: serviceT, Data: data},
+		{
+			Name:   "grpc-service",
+			Source: serviceT,
+			Data:   data,
+		},
 	}
 
 	// message definition
@@ -65,11 +69,18 @@ func protoFile(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File {
 	}
 }
 
+func pkgName(svc *expr.GRPCServiceExpr, svcName string) string {
+	if svc.ProtoPkg != "" {
+		return svc.ProtoPkg
+	}
+	return codegen.SnakeCase(svcName)
+}
+
 func protoc(path string) error {
 	dir := filepath.Dir(path)
 	os.MkdirAll(dir, 0777)
 
-	args := []string{"--go_out=plugins=grpc:.", path, "--proto_path", dir}
+	args := []string{"--proto_path", dir, "--go_out", dir, "--go-grpc_out", dir, "--go_opt=paths=source_relative", "--go-grpc_opt=paths=source_relative", path}
 	cmd := exec.Command("protoc", args...)
 	cmd.Dir = filepath.Dir(path)
 
@@ -96,7 +107,7 @@ syntax = {{ printf "%q" .ProtoVersion }};
 
 package {{ .Pkg }};
 
-option go_package = "{{ .Pkg }}pb";
+option go_package = "/{{ .Pkg }}pb";
 `
 
 	// input: ServiceData

@@ -44,6 +44,8 @@ type (
 		StructName string
 		// VarName is the service variable name (first letter in lowercase).
 		VarName string
+		// PathName is the service name as used in file and import paths.
+		PathName string
 		// PkgName is the name of the package containing the generated service
 		// code.
 		PkgName string
@@ -112,6 +114,8 @@ type (
 		PayloadDesc string
 		// PayloadEx is an example of a valid payload value.
 		PayloadEx interface{}
+		// PayloadDefault is the default value of the payload if any.
+		PayloadDefault interface{}
 		// StreamingPayload is the name of the streaming payload type if any.
 		StreamingPayload string
 		// StreamingPayloadDef is the streaming payload type definition if any.
@@ -149,8 +153,23 @@ type (
 		// ClientStream indicates that the service method receives a result
 		// stream or sends a payload result or both.
 		ClientStream *StreamData
-		// StreamKind is the kind of the stream (payload or result or bidirectional).
+		// StreamKind is the kind of the stream (payload or result or
+		// bidirectional).
 		StreamKind expr.StreamKind
+		// SkipRequestBodyEncodeDecode is true if the method payload includes
+		// the raw HTTP request body reader.
+		SkipRequestBodyEncodeDecode bool
+		// SkipResponseBodyEncodeDecode is true if the method result includes
+		// the raw HTTP response body reader.
+		SkipResponseBodyEncodeDecode bool
+		// RequestStruct is the name of the data structure containing the
+		// payload and request body reader when SkipRequestBodyEncodeDecode is
+		// used.
+		RequestStruct string
+		// ResponseStruct is the name of the data structure containing the
+		// result and response body reader when SkipResponseBodyEncodeDecode is
+		// used.
+		ResponseStruct string
 	}
 
 	// StreamData is the data used to generate client and server interfaces that
@@ -185,7 +204,7 @@ type (
 		// reference (if any) and the endpoint server stream. It is set only if the
 		// client sends a normal payload and server streams a result.
 		EndpointStruct string
-		// Kind is the kind of the stream (payload or result or bidirectional).
+		// Kind is the kind of the stream (payload, result or bidirectional).
 		Kind expr.StreamKind
 	}
 
@@ -482,28 +501,7 @@ func (d ServicesData) analyze(service *expr.ServiceExpr) *Data {
 		seenProj = make(map[string]*ProjectedTypeData)
 		seenViewed = make(map[string]*ViewedResultTypeData)
 
-		// A function to convert raw object type to user type.
-		makeUserType := func(att *expr.AttributeExpr, name string) {
-			if _, ok := att.Type.(*expr.Object); ok {
-				att.Type = &expr.UserTypeExpr{
-					AttributeExpr: expr.DupAtt(att),
-					TypeName:      name,
-				}
-			}
-			if ut, ok := att.Type.(expr.UserType); ok {
-				seen[ut.ID()] = struct{}{}
-			}
-		}
-
-		for _, e := range service.Methods {
-			name := codegen.Goify(e.Name, true)
-			// Create user type for raw object payloads
-			makeUserType(e.Payload, name+"Payload")
-			// Create user type for raw object streaming payloads
-			makeUserType(e.StreamingPayload, name+"StreamingPayload")
-			// Create user type for raw object results
-			makeUserType(e.Result, name+"Result")
-		}
+		// A function to collect user types from an error expression
 		recordError := func(er *expr.ErrorExpr) {
 			errTypes = append(errTypes, collectTypes(er.AttributeExpr, scope, seen)...)
 			if er.Type == expr.ErrorResult {
@@ -539,6 +537,30 @@ func (d ServicesData) analyze(service *expr.ServiceExpr) *Data {
 				recordError(er)
 			}
 		}
+
+		// A function to convert raw object type to user type.
+		makeUserType := func(att *expr.AttributeExpr, name, id string) {
+			if _, ok := att.Type.(*expr.Object); ok {
+				att.Type = &expr.UserTypeExpr{
+					AttributeExpr: expr.DupAtt(att),
+					TypeName:      scope.Name(name),
+					UID:           id,
+				}
+			}
+			if ut, ok := att.Type.(expr.UserType); ok {
+				seen[ut.ID()] = struct{}{}
+			}
+		}
+
+		for _, e := range service.Methods {
+			name := codegen.Goify(e.Name, true)
+			// Create user type for raw object payloads
+			makeUserType(e.Payload, name+"Payload", service.Name+"#"+name+"Payload")
+			// Create user type for raw object streaming payloads
+			makeUserType(e.StreamingPayload, name+"StreamingPayload", service.Name+"#"+name+"StreamingPayload")
+			// Create user type for raw object results
+			makeUserType(e.Result, name+"Result", service.Name+"#"+name+"Result")
+		}
 	}
 
 	for _, t := range expr.Root.Types {
@@ -568,15 +590,28 @@ func (d ServicesData) analyze(service *expr.ServiceExpr) *Data {
 		for i, e := range service.Methods {
 			m := buildMethodData(e, pkgName, service, scope)
 			if rt, ok := e.Result.Type.(*expr.ResultTypeExpr); ok {
-				if vrt, ok := seenViewed[m.Result]; ok {
+				var view string
+				if v, ok := e.Result.Meta["view"]; ok {
+					view = v[0]
+				}
+				if vrt, ok := seenViewed[m.Result+"::"+view]; ok {
 					m.ViewedResult = vrt
 				} else {
 					projected := seenProj[rt.ID()]
 					projAtt := &expr.AttributeExpr{Type: projected.Type}
 					vrt := buildViewedResultType(e.Result, projAtt, viewspkg, scope, viewScope)
-					viewedRTs = append(viewedRTs, vrt)
-					seenViewed[vrt.Name] = vrt
+					found := false
+					for _, rt := range viewedRTs {
+						if rt.Type.ID() == vrt.Type.ID() {
+							found = true
+							break
+						}
+					}
+					if !found {
+						viewedRTs = append(viewedRTs, vrt)
+					}
 					m.ViewedResult = vrt
+					seenViewed[vrt.Name+"::"+view] = vrt
 				}
 			}
 			methods[i] = m
@@ -596,10 +631,12 @@ func (d ServicesData) analyze(service *expr.ServiceExpr) *Data {
 		}
 	}
 
+	varName := codegen.Goify(service.Name, false)
 	data := &Data{
 		Name:              service.Name,
 		Description:       desc,
-		VarName:           codegen.Goify(service.Name, false),
+		VarName:           varName,
+		PathName:          codegen.SnakeCase(varName),
 		StructName:        codegen.Goify(service.Name, true),
 		PkgName:           pkgName,
 		ViewsPkg:          viewspkg,
@@ -627,8 +664,8 @@ func typeContext(pkg string, scope *codegen.NameScope) *codegen.AttributeContext
 // projectedTypeContext returns a contextual attribute for a projected type.
 // Projected types are Go types that uses pointers for all attributes (even the
 // required ones).
-func projectedTypeContext(pkg string, scope *codegen.NameScope) *codegen.AttributeContext {
-	return codegen.NewAttributeContext(true, false, true, pkg, scope)
+func projectedTypeContext(pkg string, ptr bool, scope *codegen.NameScope) *codegen.AttributeContext {
+	return codegen.NewAttributeContext(ptr, false, true, pkg, scope)
 }
 
 // collectTypes recurses through the attribute to gather all user types and
@@ -687,28 +724,21 @@ func buildErrorInitData(er *expr.ErrorExpr, scope *codegen.NameScope) *ErrorInit
 // records the user types needed by the service definition in userTypes.
 func buildMethodData(m *expr.MethodExpr, svcPkgName string, service *expr.ServiceExpr, scope *codegen.NameScope) *MethodData {
 	var (
-		vname        string
-		desc         string
-		payloadName  string
-		payloadDef   string
-		payloadRef   string
-		payloadDesc  string
-		payloadEx    interface{}
-		spayloadName string
-		spayloadDef  string
-		spayloadRef  string
-		spayloadDesc string
-		spayloadEx   interface{}
-		rname        string
-		resultDef    string
-		resultRef    string
-		resultDesc   string
-		resultEx     interface{}
-		errors       []*ErrorInitData
-		reqs         RequirementsData
-		schemes      SchemesData
-		svrStream    *StreamData
-		cliStream    *StreamData
+		vname       string
+		desc        string
+		payloadName string
+		payloadDef  string
+		payloadRef  string
+		payloadDesc string
+		payloadEx   interface{}
+		rname       string
+		resultDef   string
+		resultRef   string
+		resultDesc  string
+		resultEx    interface{}
+		errors      []*ErrorInitData
+		reqs        RequirementsData
+		schemes     SchemesData
 	)
 	vname = scope.Unique(codegen.Goify(m.Name, true), "Endpoint")
 	desc = m.Description
@@ -727,19 +757,6 @@ func buildMethodData(m *expr.MethodExpr, svcPkgName string, service *expr.Servic
 				payloadName, m.Service.Name, m.Name)
 		}
 		payloadEx = m.Payload.Example(expr.Root.API.Random())
-	}
-	if m.StreamingPayload.Type != expr.Empty {
-		spayloadName = scope.GoTypeName(m.StreamingPayload)
-		spayloadRef = scope.GoTypeRef(m.StreamingPayload)
-		if dt, ok := m.StreamingPayload.Type.(expr.UserType); ok {
-			spayloadDef = scope.GoTypeDef(dt.Attribute(), false, true)
-		}
-		spayloadDesc = m.StreamingPayload.Description
-		if spayloadDesc == "" {
-			spayloadDesc = fmt.Sprintf("%s is the streaming payload type of the %s service %s method.",
-				spayloadName, m.Service.Name, m.Name)
-		}
-		spayloadEx = m.StreamingPayload.Example(expr.Root.API.Random())
 	}
 	if m.Result.Type != expr.Empty {
 		rname = scope.GoTypeName(m.Result)
@@ -760,92 +777,126 @@ func buildMethodData(m *expr.MethodExpr, svcPkgName string, service *expr.Servic
 			errors[i] = buildErrorInitData(er, scope)
 		}
 	}
-	if m.IsStreaming() {
-		svrStream = &StreamData{
-			Interface:      vname + "ServerStream",
-			VarName:        m.Name + "ServerStream",
-			EndpointStruct: vname + "EndpointInput",
-			Kind:           m.Stream,
-			SendName:       "Send",
-			SendDesc:       fmt.Sprintf("Send streams instances of %q.", rname),
-			SendTypeName:   rname,
-			SendTypeRef:    resultRef,
-			MustClose:      true,
-		}
-		cliStream = &StreamData{
-			Interface:    vname + "ClientStream",
-			VarName:      m.Name + "ClientStream",
-			Kind:         m.Stream,
-			RecvName:     "Recv",
-			RecvDesc:     fmt.Sprintf("Recv reads instances of %q from the stream.", rname),
-			RecvTypeName: rname,
-			RecvTypeRef:  resultRef,
-		}
-		if m.Stream == expr.ClientStreamKind || m.Stream == expr.BidirectionalStreamKind {
-			switch m.Stream {
-			case expr.ClientStreamKind:
-				if resultRef != "" {
-					svrStream.SendName = "SendAndClose"
-					svrStream.SendDesc = fmt.Sprintf("SendAndClose streams instances of %q and closes the stream.", rname)
-					svrStream.MustClose = false
-					cliStream.RecvName = "CloseAndRecv"
-					cliStream.RecvDesc = fmt.Sprintf("CloseAndRecv stops sending messages to the stream and reads instances of %q from the stream.", rname)
-				} else {
-					cliStream.MustClose = true
-				}
-			case expr.BidirectionalStreamKind:
-				cliStream.MustClose = true
-			}
-			svrStream.RecvName = "Recv"
-			svrStream.RecvDesc = fmt.Sprintf("Recv reads instances of %q from the stream.", spayloadName)
-			svrStream.RecvTypeName = spayloadName
-			svrStream.RecvTypeRef = spayloadRef
-			cliStream.SendName = "Send"
-			cliStream.SendDesc = fmt.Sprintf("Send streams instances of %q.", spayloadName)
-			cliStream.SendTypeName = spayloadName
-			cliStream.SendTypeRef = spayloadRef
-		}
-	}
 	for _, req := range m.Requirements {
 		var rs SchemesData
 		for _, s := range req.Schemes {
-			sch := buildSchemeData(s, m)
+			sch := BuildSchemeData(s, m)
 			rs = rs.Append(sch)
 			schemes = schemes.Append(sch)
 		}
 		reqs = append(reqs, &RequirementData{Schemes: rs, Scopes: req.Scopes})
 	}
-
-	return &MethodData{
-		Name:                 m.Name,
-		VarName:              vname,
-		Description:          desc,
-		Payload:              payloadName,
-		PayloadDef:           payloadDef,
-		PayloadRef:           payloadRef,
-		PayloadDesc:          payloadDesc,
-		PayloadEx:            payloadEx,
-		StreamingPayload:     spayloadName,
-		StreamingPayloadDef:  spayloadDef,
-		StreamingPayloadRef:  spayloadRef,
-		StreamingPayloadDesc: spayloadDesc,
-		StreamingPayloadEx:   spayloadEx,
-		Result:               rname,
-		ResultDef:            resultDef,
-		ResultRef:            resultRef,
-		ResultDesc:           resultDesc,
-		ResultEx:             resultEx,
-		Errors:               errors,
-		Requirements:         reqs,
-		Schemes:              schemes,
-		ServerStream:         svrStream,
-		ClientStream:         cliStream,
-		StreamKind:           m.Stream,
+	var httpMet *expr.HTTPEndpointExpr
+	if httpSvc := expr.Root.HTTPService(m.Service.Name); httpSvc != nil {
+		httpMet = httpSvc.Endpoint(m.Name)
 	}
+	data := &MethodData{
+		Name:                         m.Name,
+		VarName:                      vname,
+		Description:                  desc,
+		Payload:                      payloadName,
+		PayloadDef:                   payloadDef,
+		PayloadRef:                   payloadRef,
+		PayloadDesc:                  payloadDesc,
+		PayloadEx:                    payloadEx,
+		PayloadDefault:               m.Payload.DefaultValue,
+		Result:                       rname,
+		ResultDef:                    resultDef,
+		ResultRef:                    resultRef,
+		ResultDesc:                   resultDesc,
+		ResultEx:                     resultEx,
+		Errors:                       errors,
+		Requirements:                 reqs,
+		Schemes:                      schemes,
+		StreamKind:                   m.Stream,
+		SkipRequestBodyEncodeDecode:  httpMet != nil && httpMet.SkipRequestBodyEncodeDecode,
+		SkipResponseBodyEncodeDecode: httpMet != nil && httpMet.SkipResponseBodyEncodeDecode,
+		RequestStruct:                vname + "RequestData",
+		ResponseStruct:               vname + "ResponseData",
+	}
+	if m.IsStreaming() {
+		initStreamData(data, m, vname, rname, resultRef, scope)
+	}
+	return data
 }
 
-// buildSchemeData builds the scheme data for the given scheme and method expr.
-func buildSchemeData(s *expr.SchemeExpr, m *expr.MethodExpr) *SchemeData {
+// initStreamData initializes the streaming payload data structures and methods.
+func initStreamData(data *MethodData, m *expr.MethodExpr, vname, rname, resultRef string, scope *codegen.NameScope) {
+	var (
+		spayloadName string
+		spayloadRef  string
+		spayloadDef  string
+		spayloadDesc string
+		spayloadEx   interface{}
+	)
+	if m.StreamingPayload.Type != expr.Empty {
+		spayloadName = scope.GoTypeName(m.StreamingPayload)
+		spayloadRef = scope.GoTypeRef(m.StreamingPayload)
+		if dt, ok := m.StreamingPayload.Type.(expr.UserType); ok {
+			spayloadDef = scope.GoTypeDef(dt.Attribute(), false, true)
+		}
+		spayloadDesc = m.StreamingPayload.Description
+		if spayloadDesc == "" {
+			spayloadDesc = fmt.Sprintf("%s is the streaming payload type of the %s service %s method.",
+				spayloadName, m.Service.Name, m.Name)
+		}
+		spayloadEx = m.StreamingPayload.Example(expr.Root.API.Random())
+	}
+	svrStream := &StreamData{
+		Interface:      vname + "ServerStream",
+		VarName:        scope.Unique(codegen.Goify(m.Name, true), "ServerStream"),
+		EndpointStruct: vname + "EndpointInput",
+		Kind:           m.Stream,
+		SendName:       "Send",
+		SendDesc:       fmt.Sprintf("Send streams instances of %q.", rname),
+		SendTypeName:   rname,
+		SendTypeRef:    resultRef,
+		MustClose:      true,
+	}
+	cliStream := &StreamData{
+		Interface:    vname + "ClientStream",
+		VarName:      scope.Unique(codegen.Goify(m.Name, true), "ClientStream"),
+		Kind:         m.Stream,
+		RecvName:     "Recv",
+		RecvDesc:     fmt.Sprintf("Recv reads instances of %q from the stream.", rname),
+		RecvTypeName: rname,
+		RecvTypeRef:  resultRef,
+	}
+	if m.Stream == expr.ClientStreamKind || m.Stream == expr.BidirectionalStreamKind {
+		switch m.Stream {
+		case expr.ClientStreamKind:
+			if resultRef != "" {
+				svrStream.SendName = "SendAndClose"
+				svrStream.SendDesc = fmt.Sprintf("SendAndClose streams instances of %q and closes the stream.", rname)
+				svrStream.MustClose = false
+				cliStream.RecvName = "CloseAndRecv"
+				cliStream.RecvDesc = fmt.Sprintf("CloseAndRecv stops sending messages to the stream and reads instances of %q from the stream.", rname)
+			} else {
+				cliStream.MustClose = true
+			}
+		case expr.BidirectionalStreamKind:
+			cliStream.MustClose = true
+		}
+		svrStream.RecvName = "Recv"
+		svrStream.RecvDesc = fmt.Sprintf("Recv reads instances of %q from the stream.", spayloadName)
+		svrStream.RecvTypeName = spayloadName
+		svrStream.RecvTypeRef = spayloadRef
+		cliStream.SendName = "Send"
+		cliStream.SendDesc = fmt.Sprintf("Send streams instances of %q.", spayloadName)
+		cliStream.SendTypeName = spayloadName
+		cliStream.SendTypeRef = spayloadRef
+	}
+	data.ClientStream = cliStream
+	data.ServerStream = svrStream
+	data.StreamingPayload = spayloadName
+	data.StreamingPayloadDef = spayloadDef
+	data.StreamingPayloadRef = spayloadDef
+	data.StreamingPayloadDesc = spayloadDesc
+	data.StreamingPayloadEx = spayloadEx
+}
+
+// BuildSchemeData builds the scheme data for the given scheme and method expr.
+func BuildSchemeData(s *expr.SchemeExpr, m *expr.MethodExpr) *SchemeData {
 	if !expr.IsObject(m.Payload.Type) {
 		return nil
 	}
@@ -947,8 +998,11 @@ func buildSchemeData(s *expr.SchemeExpr, m *expr.MethodExpr) *SchemeData {
 }
 
 // collectProjectedTypes builds a projected type for every user type found
-// when recursing through the attributes. It stores the projected types in
-// data.
+// when recursing through the attributes. The projected types live in the views
+// package and support the marshaling and unmarshalling of result types that
+// make use of views. We need to build projected types for all user types - not
+// just result types - because user types make contain result types and thus may
+// need to be marshalled in different ways depending on the view being used.
 func collectProjectedTypes(projected, att *expr.AttributeExpr, viewspkg string, scope, viewScope *codegen.NameScope, seen map[string]*ProjectedTypeData) (data []*ProjectedTypeData) {
 	collect := func(projected, att *expr.AttributeExpr) []*ProjectedTypeData {
 		return collectProjectedTypes(projected, att, viewspkg, scope, viewScope, seen)
@@ -1259,7 +1313,7 @@ func buildTypeInits(projected, att *expr.AttributeExpr, viewspkg string, scope, 
 				code    string
 				helpers []*codegen.TransformFunctionData
 
-				srcCtx = projectedTypeContext(viewspkg, viewScope)
+				srcCtx = projectedTypeContext(viewspkg, true, viewScope)
 				tgtCtx = typeContext("", scope)
 				resvar = scope.GoTypeName(att)
 			)
@@ -1339,7 +1393,7 @@ func buildProjections(projected, att *expr.AttributeExpr, viewspkg string, scope
 			helpers []*codegen.TransformFunctionData
 
 			srcCtx = typeContext("", scope)
-			tgtCtx = projectedTypeContext(viewspkg, viewScope)
+			tgtCtx = projectedTypeContext(viewspkg, true, viewScope)
 			tname  = scope.GoTypeName(projected)
 		)
 		{
@@ -1423,9 +1477,9 @@ func buildValidations(projected *expr.AttributeExpr, scope *codegen.NameScope) [
 							o.Set(name, attr)
 						}
 					})
-					ctx = projectedTypeContext("", scope)
+					ctx = projectedTypeContext("", !expr.IsPrimitive(projected.Type), scope)
 				}
-				data["Validate"] = codegen.RecursiveValidationCode(&expr.AttributeExpr{Type: o, Validation: rt.Validation}, ctx, true, "result")
+				data["Validate"] = codegen.RecursiveValidationCode(&expr.AttributeExpr{Type: o, Validation: rt.Validation}, ctx, true, false, "result")
 				data["Fields"] = fields
 			}
 
@@ -1445,12 +1499,12 @@ func buildValidations(projected *expr.AttributeExpr, scope *codegen.NameScope) [
 		// for a user type or a result type with single view, we generate only one validation
 		// function containing the validation logic
 		name := "Validate" + tname
-		ctx := projectedTypeContext("", scope)
+		ctx := projectedTypeContext("", !expr.IsPrimitive(projected.Type), scope)
 		validations = append(validations, &ValidateData{
 			Name:        name,
 			Description: fmt.Sprintf("%s runs the validations defined on %s.", name, tname),
 			Ref:         scope.GoTypeRef(projected),
-			Validate:    codegen.RecursiveValidationCode(ut.Attribute(), ctx, true, "result"),
+			Validate:    codegen.RecursiveValidationCode(ut.Attribute(), ctx, true, expr.IsAlias(ut), "result"),
 		})
 	}
 	return validations
@@ -1478,12 +1532,12 @@ func buildConstructorCode(src, tgt *expr.AttributeExpr, sourceVar, targetVar str
 		"ArgVar":       sourceVar,
 		"ReturnVar":    targetVar,
 		"IsCollection": arr != nil,
-		"TargetType":   targetCtx.Scope.Name(tgt, targetCtx.Pkg),
+		"TargetType":   targetCtx.Scope.Name(tgt, targetCtx.Pkg, targetCtx.Pointer, targetCtx.UseDefault),
 	}
 
 	if arr != nil {
 		// result type collection
-		init := "new" + targetCtx.Scope.Name(arr.ElemType, "")
+		init := "new" + targetCtx.Scope.Name(arr.ElemType, "", targetCtx.Pointer, targetCtx.UseDefault)
 		if view != "" && view != expr.DefaultView {
 			init += codegen.Goify(view, true)
 		}
@@ -1513,20 +1567,20 @@ func buildConstructorCode(src, tgt *expr.AttributeExpr, sourceVar, targetVar str
 	)
 	{
 		// build code for target with no result types
-		if code, helpers, err = codegen.GoTransform(src, tatt, sourceVar, targetVar, sourceCtx, targetCtx, "transform"); err != nil {
+		if code, helpers, err = codegen.GoTransform(src, tatt, sourceVar, targetVar, sourceCtx, targetCtx, "transform", true); err != nil {
 			panic(err) // bug
 		}
 	}
 	data["Code"] = code
 
 	if view != "" {
-		data["InitName"] = targetCtx.Scope.Name(src, "")
+		data["InitName"] = targetCtx.Scope.Name(src, "", targetCtx.Pointer, targetCtx.UseDefault)
 	}
 	fields := make([]map[string]interface{}, 0, len(*targetRTs))
 	// iterate through the result types found in the target and add the
 	// code to initialize them
 	for _, nat := range *targetRTs {
-		finit := "new" + targetCtx.Scope.Name(nat.Attribute, "")
+		finit := "new" + targetCtx.Scope.Name(nat.Attribute, "", targetCtx.Pointer, targetCtx.UseDefault)
 		if view != "" {
 			v := ""
 			if vatt := rt.View(view).AttributeExpr.Find(nat.Name); vatt != nil {
@@ -1561,24 +1615,37 @@ func walkViewAttrs(obj *expr.Object, view *expr.ViewExpr, walker func(name strin
 }
 
 const (
-	initTypeCodeT = `{{- if or .ToResult .ToViewed -}}
+	initTypeCodeT = `{{ if or .ToResult .ToViewed }}
+	{{- if eq (len .Views) 1 }}
+		{{- with (index .Views 0) }}
+			{{- if $.ToViewed -}}
+	p := {{ $.InitName }}{{ if ne .Name "default" }}{{ goify .Name true }}{{ end }}({{ $.ArgVar }})
+	return {{ if not $.IsCollection }}&{{ end }}{{ $.TargetType }}{Projected: p, View: {{ printf "%q" .Name }} }
+ 			{{- else -}}
+			return {{ $.InitName }}{{ if ne .Name "default" }}{{ goify .Name true }}{{ end }}({{ $.ArgVar }}.Projected)
+			{{- end }}
+		{{- end }}
+	{{- else -}}
 	var {{ .ReturnVar }} {{ .ReturnTypeRef }}
 	switch {{ if .ToResult }}{{ .ArgVar }}.View{{ else }}view{{ end }} {
-	{{- range .Views }}
+		{{- range .Views }}
 		case {{ printf "%q" .Name }}{{ if eq .Name "default" }}, ""{{ end }}:
 			{{- if $.ToViewed }}
 				p := {{ $.InitName }}{{ if ne .Name "default" }}{{ goify .Name true }}{{ end }}({{ $.ArgVar }})
-				{{ $.ReturnVar }} = {{ if not $.IsCollection }}&{{ end }}{{ $.TargetType }}{ p,  {{ printf "%q" .Name }} }
+				{{ $.ReturnVar }} = {{ if not $.IsCollection }}&{{ end }}{{ $.TargetType }}{Projected: p, View: {{ printf "%q" .Name }} }
 			{{- else }}
 				{{ $.ReturnVar }} = {{ $.InitName }}{{ if ne .Name "default" }}{{ goify .Name true }}{{ end }}({{ $.ArgVar }}.Projected)
 			{{- end }}
-	{{- end }}
+		{{- end }}
 	}
+	return {{ .ReturnVar }}
+	{{- end }}
 {{- else if .IsCollection -}}
 	{{ .ReturnVar }} := make({{ .TargetType }}, len({{ .ArgVar }}))
 	for i, n := range {{ .ArgVar }} {
 		{{ .ReturnVar }}[i] = {{ .InitName }}(n)
 	}
+	return {{ .ReturnVar }}
 {{- else -}}
 	{{ .Code }}
 	{{- range .Fields }}
@@ -1586,8 +1653,8 @@ const (
 			{{ $.Target }}.{{ .VarName }} = {{ .FieldInit }}({{ $.Source }}.{{ .VarName }})
 		}
 	{{- end }}
-{{- end }}
-return {{ .ReturnVar }}`
+	return {{ .ReturnVar }}
+{{- end }}`
 
 	validateTypeT = `{{- if .IsViewed -}}
 switch {{ .ArgVar }}.View {

@@ -67,7 +67,7 @@ func DecodeMethodBodyMultipleViewResponse(decoder func(*http.Response) goahttp.D
 			}
 			p := NewMethodBodyMultipleViewResulttypemultipleviewsOK(&body, c)
 			view := resp.Header.Get("goa-view")
-			vres := &servicebodymultipleviewviews.Resulttypemultipleviews{p, view}
+			vres := &servicebodymultipleviewviews.Resulttypemultipleviews{Projected: p, View: view}
 			if err = servicebodymultipleviewviews.ValidateResulttypemultipleviews(vres); err != nil {
 				return nil, goahttp.ErrValidationError("ServiceBodyMultipleView", "MethodBodyMultipleView", err)
 			}
@@ -110,7 +110,7 @@ func DecodeMethodEmptyBodyResultMultipleViewResponse(decoder func(*http.Response
 			}
 			p := NewMethodEmptyBodyResultMultipleViewResulttypemultipleviewsOK(c)
 			view := resp.Header.Get("goa-view")
-			vres := &serviceemptybodyresultmultipleviewviews.Resulttypemultipleviews{p, view}
+			vres := &serviceemptybodyresultmultipleviewviews.Resulttypemultipleviews{Projected: p, View: view}
 			res := serviceemptybodyresultmultipleview.NewResulttypemultipleviews(vres)
 			return res, nil
 		default:
@@ -165,7 +165,7 @@ func DecodeMethodExplicitBodyPrimitiveResultMultipleViewResponse(decoder func(*h
 			}
 			p := NewMethodExplicitBodyPrimitiveResultMultipleViewResulttypemultipleviewsOK(body, c)
 			view := resp.Header.Get("goa-view")
-			vres := &serviceexplicitbodyprimitiveresultmultipleviewviews.Resulttypemultipleviews{p, view}
+			vres := &serviceexplicitbodyprimitiveresultmultipleviewviews.Resulttypemultipleviews{Projected: p, View: view}
 			if err = serviceexplicitbodyprimitiveresultmultipleviewviews.ValidateResulttypemultipleviews(vres); err != nil {
 				return nil, goahttp.ErrValidationError("ServiceExplicitBodyPrimitiveResultMultipleView", "MethodExplicitBodyPrimitiveResultMultipleView", err)
 			}
@@ -200,7 +200,7 @@ func DecodeMethodExplicitBodyUserResultMultipleViewResponse(decoder func(*http.R
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body UserType
+				body MethodExplicitBodyUserResultMultipleViewResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
@@ -216,7 +216,7 @@ func DecodeMethodExplicitBodyUserResultMultipleViewResponse(decoder func(*http.R
 			}
 			p := NewMethodExplicitBodyUserResultMultipleViewResulttypemultipleviewsOK(&body, c)
 			view := resp.Header.Get("goa-view")
-			vres := &serviceexplicitbodyuserresultmultipleviewviews.Resulttypemultipleviews{p, view}
+			vres := &serviceexplicitbodyuserresultmultipleviewviews.Resulttypemultipleviews{Projected: p, View: view}
 			if err = serviceexplicitbodyuserresultmultipleviewviews.ValidateResulttypemultipleviews(vres); err != nil {
 				return nil, goahttp.ErrValidationError("ServiceExplicitBodyUserResultMultipleView", "MethodExplicitBodyUserResultMultipleView", err)
 			}
@@ -311,7 +311,7 @@ func DecodeMethodTagMultipleViewsResponse(decoder func(*http.Response) goahttp.D
 			tmp := "value"
 			p.B = &tmp
 			view := resp.Header.Get("goa-view")
-			vres := &servicetagmultipleviewsviews.Resulttypemultipleviews{p, view}
+			vres := &servicetagmultipleviewsviews.Resulttypemultipleviews{Projected: p, View: view}
 			if err = servicetagmultipleviewsviews.ValidateResulttypemultipleviews(vres); err != nil {
 				return nil, goahttp.ErrValidationError("ServiceTagMultipleViews", "MethodTagMultipleViews", err)
 			}
@@ -328,7 +328,7 @@ func DecodeMethodTagMultipleViewsResponse(decoder func(*http.Response) goahttp.D
 			}
 			p := NewMethodTagMultipleViewsResulttypemultipleviewsOK(&body)
 			view := resp.Header.Get("goa-view")
-			vres := &servicetagmultipleviewsviews.Resulttypemultipleviews{p, view}
+			vres := &servicetagmultipleviewsviews.Resulttypemultipleviews{Projected: p, View: view}
 			if err = servicetagmultipleviewsviews.ValidateResulttypemultipleviews(vres); err != nil {
 				return nil, goahttp.ErrValidationError("ServiceTagMultipleViews", "MethodTagMultipleViews", err)
 			}
@@ -371,6 +371,47 @@ func DecodeMethodEmptyServerResponseWithTagsResponse(decoder func(*http.Response
 		default:
 			body, _ := ioutil.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("ServiceEmptyServerResponseWithTags", "MethodEmptyServerResponseWithTags", resp.StatusCode, string(body))
+		}
+	}
+}
+`
+
+var ResultHeaderStringImplicitResponseDecodeCode = `// DecodeMethodHeaderStringImplicitResponse returns a decoder for responses
+// returned by the ServiceHeaderStringImplicit MethodHeaderStringImplicit
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+func DecodeMethodHeaderStringImplicitResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (interface{}, error) {
+	return func(resp *http.Response) (interface{}, error) {
+		if restoreBody {
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				h   string
+				err error
+			)
+			hRaw := resp.Header.Get("H")
+			if hRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("h", "header"))
+			}
+			h = hRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("ServiceHeaderStringImplicit", "MethodHeaderStringImplicit", err)
+			}
+			return h, nil
+		default:
+			body, _ := ioutil.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("ServiceHeaderStringImplicit", "MethodHeaderStringImplicit", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -690,7 +731,7 @@ func DecodeMethodAResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			}
 			p := NewMethodAAResultOK(required, optional, optionalButRequired)
 			view := resp.Header.Get("goa-view")
-			vres := &servicewithheadersblockviewedresultviews.AResult{p, view}
+			vres := &servicewithheadersblockviewedresultviews.AResult{Projected: p, View: view}
 			res := servicewithheadersblockviewedresult.NewAResult(vres)
 			return res, nil
 		default:
@@ -743,7 +784,7 @@ func DecodeMethodAResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			}
 			p := NewMethodAAResultOK(required)
 			view := "default"
-			vres := &validateerrorresponsetypeviews.AResult{p, view}
+			vres := &validateerrorresponsetypeviews.AResult{Projected: p, View: view}
 			res := validateerrorresponsetype.NewAResult(vres)
 			return res, nil
 		case http.StatusBadRequest:
@@ -780,6 +821,115 @@ func DecodeMethodAResponse(decoder func(*http.Response) goahttp.Decoder, restore
 		default:
 			body, _ := ioutil.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("ValidateErrorResponseType", "MethodA", resp.StatusCode, string(body))
+		}
+	}
+}
+`
+
+var EmptyErrorResponseBodyDecodeCode = `// DecodeMethodEmptyErrorResponseBodyResponse returns a decoder for responses
+// returned by the ServiceEmptyErrorResponseBody MethodEmptyErrorResponseBody
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeMethodEmptyErrorResponseBodyResponse may return the following errors:
+//	- "internal_error" (type *goa.ServiceError): http.StatusInternalServerError
+//	- "not_found" (type serviceemptyerrorresponsebody.NotFound): http.StatusNotFound
+//	- error: internal error
+func DecodeMethodEmptyErrorResponseBodyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (interface{}, error) {
+	return func(resp *http.Response) (interface{}, error) {
+		if restoreBody {
+			b, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = ioutil.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			return nil, nil
+		case http.StatusInternalServerError:
+			var (
+				name      string
+				id        string
+				message   string
+				temporary bool
+				timeout   bool
+				fault     bool
+				err       error
+			)
+			nameRaw := resp.Header.Get("Error-Name")
+			if nameRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("Error-Name", "header"))
+			}
+			name = nameRaw
+			idRaw := resp.Header.Get("Goa-Attribute-Id")
+			if idRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("goa-attribute-id", "header"))
+			}
+			id = idRaw
+			messageRaw := resp.Header.Get("Goa-Attribute-Message")
+			if messageRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("goa-attribute-message", "header"))
+			}
+			message = messageRaw
+			{
+				temporaryRaw := resp.Header.Get("Goa-Attribute-Temporary")
+				if temporaryRaw == "" {
+					return nil, goahttp.ErrValidationError("ServiceEmptyErrorResponseBody", "MethodEmptyErrorResponseBody", goa.MissingFieldError("goa-attribute-temporary", "header"))
+				}
+				v, err2 := strconv.ParseBool(temporaryRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("temporary", temporaryRaw, "boolean"))
+				}
+				temporary = v
+			}
+			{
+				timeoutRaw := resp.Header.Get("Goa-Attribute-Timeout")
+				if timeoutRaw == "" {
+					return nil, goahttp.ErrValidationError("ServiceEmptyErrorResponseBody", "MethodEmptyErrorResponseBody", goa.MissingFieldError("goa-attribute-timeout", "header"))
+				}
+				v, err2 := strconv.ParseBool(timeoutRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("timeout", timeoutRaw, "boolean"))
+				}
+				timeout = v
+			}
+			{
+				faultRaw := resp.Header.Get("Goa-Attribute-Fault")
+				if faultRaw == "" {
+					return nil, goahttp.ErrValidationError("ServiceEmptyErrorResponseBody", "MethodEmptyErrorResponseBody", goa.MissingFieldError("goa-attribute-fault", "header"))
+				}
+				v, err2 := strconv.ParseBool(faultRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("fault", faultRaw, "boolean"))
+				}
+				fault = v
+			}
+			if err != nil {
+				return nil, goahttp.ErrValidationError("ServiceEmptyErrorResponseBody", "MethodEmptyErrorResponseBody", err)
+			}
+			return nil, NewMethodEmptyErrorResponseBodyInternalError(name, id, message, temporary, timeout, fault)
+		case http.StatusNotFound:
+			var (
+				inHeader string
+				err      error
+			)
+			inHeaderRaw := resp.Header.Get("In-Header")
+			if inHeaderRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("in-header", "header"))
+			}
+			inHeader = inHeaderRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("ServiceEmptyErrorResponseBody", "MethodEmptyErrorResponseBody", err)
+			}
+			return nil, NewMethodEmptyErrorResponseBodyNotFound(inHeader)
+		default:
+			body, _ := ioutil.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("ServiceEmptyErrorResponseBody", "MethodEmptyErrorResponseBody", resp.StatusCode, string(body))
 		}
 	}
 }

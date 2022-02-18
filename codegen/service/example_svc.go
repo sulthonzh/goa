@@ -40,11 +40,11 @@ func ExampleServiceFiles(genpkg string, root *expr.RootExpr) []*codegen.File {
 	// determine the unique API package name different from the service names
 	scope := codegen.NewNameScope()
 	for _, svc := range root.Services {
-		svc := Services.Get(svc.Name)
-		if svc == nil {
+		s := Services.Get(svc.Name)
+		if s == nil {
 			panic("unknown service, " + svc.Name) // bug
 		}
-		scope.Unique(svc.PkgName)
+		scope.Unique(s.PkgName)
 	}
 	apipkg := scope.Unique(strings.ToLower(codegen.Goify(root.API.Name, false)), "api")
 
@@ -60,20 +60,32 @@ func ExampleServiceFiles(genpkg string, root *expr.RootExpr) []*codegen.File {
 // exampleServiceFile returns a basic implementation of the given service.
 func exampleServiceFile(genpkg string, root *expr.RootExpr, svc *expr.ServiceExpr, apipkg string) *codegen.File {
 	data := Services.Get(svc.Name)
-	svcName := codegen.SnakeCase(data.VarName)
+	svcName := data.PathName
 	fpath := svcName + ".go"
 	if _, err := os.Stat(fpath); !os.IsNotExist(err) {
 		return nil // file already exists, skip it.
 	}
 	specs := []*codegen.ImportSpec{
+		{Path: "io"},
+		{Path: "io/ioutil"},
 		{Path: "context"},
 		{Path: "log"},
-		{Path: path.Join(genpkg, codegen.SnakeCase(svcName)), Name: data.PkgName},
+		{Path: "fmt"},
+		{Path: "strings"},
+		{Path: path.Join(genpkg, svcName), Name: data.PkgName},
+		{Path: "goa.design/goa/v3/security"},
 	}
 	sections := []*codegen.SectionTemplate{
 		codegen.Header("", apipkg, specs),
 		{Name: "basic-service-struct", Source: svcStructT, Data: data},
 		{Name: "basic-service-init", Source: svcInitT, Data: data},
+	}
+	if len(data.Schemes) > 0 {
+		sections = append(sections, &codegen.SectionTemplate{
+			Name:   "security-authfuncs",
+			Source: dummyAuthFuncsT,
+			Data:   data,
+		})
 	}
 	for _, m := range svc.Methods {
 		sections = append(sections, basicEndpointSection(m, data))
@@ -103,10 +115,8 @@ func basicEndpointSection(m *expr.MethodExpr, svcData *Data) *codegen.SectionTem
 		ed.ResultIsStruct = expr.IsObject(m.Result.Type)
 		if md.ViewedResult != nil {
 			view := "default"
-			if m.Result.Meta != nil {
-				if v, ok := m.Result.Meta["view"]; ok {
-					view = v[0]
-				}
+			if v, ok := m.Result.Meta["view"]; ok {
+				view = v[0]
 			}
 			ed.ResultView = view
 		}
@@ -125,14 +135,14 @@ const (
 	// input: service.Data
 	svcStructT = `{{ printf "%s service example implementation.\nThe example methods log the requests and return zero values." .Name | comment }}
 type {{ .VarName }}srvc struct {
-  logger *log.Logger
+	logger *log.Logger
 }
 `
 
 	// input: service.Data
 	svcInitT = `{{ printf "New%s returns the %s service implementation." .StructName .Name | comment }}
 func New{{ .StructName }}(logger *log.Logger) {{ .PkgName }}.Service {
-  return &{{ .VarName }}srvc{logger}
+	return &{{ .VarName }}srvc{logger}
 }
 `
 
@@ -141,10 +151,18 @@ func New{{ .StructName }}(logger *log.Logger) {{ .PkgName }}.Service {
 {{- if .ServerStream }}
 func (s *{{ .ServiceVarName }}srvc) {{ .VarName }}(ctx context.Context{{ if .PayloadFullRef }}, p {{ .PayloadFullRef }}{{ end }}, stream {{ .StreamInterface }}) (err error) {
 {{- else }}
-func (s *{{ .ServiceVarName }}srvc) {{ .VarName }}(ctx context.Context{{ if .PayloadFullRef }}, p {{ .PayloadFullRef }}{{ end }}) ({{ if .ResultFullRef }}res {{ .ResultFullRef }}, {{ if .ViewedResult }}{{ if not .ViewedResult.ViewName }}view string, {{ end }}{{ end }} {{ end }}err error) {
+func (s *{{ .ServiceVarName }}srvc) {{ .VarName }}(ctx context.Context{{ if .PayloadFullRef }}, p {{ .PayloadFullRef }}{{ end }}{{ if .SkipRequestBodyEncodeDecode }}, req io.ReadCloser{{ end }}) ({{ if .ResultFullRef }}res {{ .ResultFullRef }}, {{ end }}{{ if .SkipResponseBodyEncodeDecode }}resp io.ReadCloser, {{ end }}{{ if .ViewedResult }}{{ if not .ViewedResult.ViewName }}view string, {{ end }}{{ end }}err error) {
+{{- end }}
+{{- if .SkipRequestBodyEncodeDecode }}
+	// req is the HTTP request body stream.
+	defer req.Close()
 {{- end }}
 {{- if and (and .ResultFullRef .ResultIsStruct) (not .ServerStream) }}
-  res = &{{ .ResultFullName }}{}
+	res = &{{ .ResultFullName }}{}
+{{- end }}
+{{- if .SkipResponseBodyEncodeDecode }}
+	// resp is the HTTP response body stream.
+	resp = ioutil.NopCloser(strings.NewReader("{{ .Name }}"))
 {{- end }}
 {{- if .ViewedResult }}
 	{{- if not .ViewedResult.ViewName }}
@@ -155,8 +173,8 @@ func (s *{{ .ServiceVarName }}srvc) {{ .VarName }}(ctx context.Context{{ if .Pay
 		{{- end }}
 	{{- end }}
 {{- end }}
-  s.logger.Print("{{ .ServiceVarName }}.{{ .Name }}")
-  return
+	s.logger.Print("{{ .ServiceVarName }}.{{ .Name }}")
+	return
 }
 `
 )

@@ -22,15 +22,16 @@ var StreamingResultServerHandlerInitCode = `// NewStreamingResultMethodHandler c
 func NewStreamingResultMethodHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
-	dec func(*http.Request) goahttp.Decoder,
-	enc func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	eh func(context.Context, http.ResponseWriter, error),
-	up goahttp.Upgrader,
-	connConfigFn goahttp.ConnConfigureFunc,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(err error) goahttp.Statuser,
+	upgrader goahttp.Upgrader,
+	configurer goahttp.ConnConfigureFunc,
 ) http.Handler {
 	var (
-		decodeRequest = DecodeStreamingResultMethodRequest(mux, dec)
-		encodeError   = goahttp.ErrorEncoder(enc)
+		decodeRequest = DecodeStreamingResultMethodRequest(mux, decoder)
+		encodeError   = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -39,33 +40,31 @@ func NewStreamingResultMethodHandler(
 		payload, err := decodeRequest(r)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
-
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		v := &streamingresultservice.StreamingResultMethodEndpointInput{
 			Stream: &StreamingResultMethodServerStream{
-				upgrader:     up,
-				connConfigFn: connConfigFn,
-				cancel:       cancel,
-				w:            w,
-				r:            r,
+				upgrader:   upgrader,
+				configurer: configurer,
+				cancel:     cancel,
+				w:          w,
+				r:          r,
 			},
 			Payload: payload.(*streamingresultservice.Request),
 		}
 		_, err = endpoint(ctx, v)
-
 		if err != nil {
-			if _, ok := err.(websocket.HandshakeError); ok {
+			if _, werr := w.Write(nil); werr == http.ErrHijacked {
+				// Response writer has been hijacked, do not encode the error
+				errhandler(ctx, w, err)
 				return
 			}
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
@@ -86,8 +85,8 @@ func (s *StreamingResultMethodServerStream) Send(v *streamingresultservice.UserT
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -132,8 +131,8 @@ func (s *StreamingResultWithViewsMethodServerStream) Send(v *streamingresultwith
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -168,41 +167,41 @@ var StreamingResultNoPayloadServerHandlerInitCode = `// NewStreamingResultNoPayl
 func NewStreamingResultNoPayloadMethodHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
-	dec func(*http.Request) goahttp.Decoder,
-	enc func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	eh func(context.Context, http.ResponseWriter, error),
-	up goahttp.Upgrader,
-	connConfigFn goahttp.ConnConfigureFunc,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(err error) goahttp.Statuser,
+	upgrader goahttp.Upgrader,
+	configurer goahttp.ConnConfigureFunc,
 ) http.Handler {
 	var (
-		encodeError = goahttp.ErrorEncoder(enc)
+		encodeError = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "StreamingResultNoPayloadMethod")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "StreamingResultNoPayloadService")
-
+		var err error
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		v := &streamingresultnopayloadservice.StreamingResultNoPayloadMethodEndpointInput{
 			Stream: &StreamingResultNoPayloadMethodServerStream{
-				upgrader:     up,
-				connConfigFn: connConfigFn,
-				cancel:       cancel,
-				w:            w,
-				r:            r,
+				upgrader:   upgrader,
+				configurer: configurer,
+				cancel:     cancel,
+				w:          w,
+				r:          r,
 			},
 		}
 		_, err = endpoint(ctx, v)
-
 		if err != nil {
-			if _, ok := err.(websocket.HandshakeError); ok {
+			if _, werr := w.Write(nil); werr == http.ErrHijacked {
+				// Response writer has been hijacked, do not encode the error
+				errhandler(ctx, w, err)
 				return
 			}
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
@@ -214,7 +213,6 @@ var StreamingResultClientEndpointCode = `// StreamingResultMethod returns an end
 // StreamingResultService service StreamingResultMethod server.
 func (c *Client) StreamingResultMethod() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeStreamingResultMethodRequest(c.encoder)
 		decodeResponse = DecodeStreamingResultMethodResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v interface{}) (interface{}, error) {
@@ -222,14 +220,8 @@ func (c *Client) StreamingResultMethod() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		conn, resp, err := c.dialer.DialContext(ctx, req.URL.String(), req.Header)
 		if err != nil {
 			if resp != nil {
@@ -299,7 +291,6 @@ var StreamingResultWithViewsClientEndpointCode = `// StreamingResultWithViewsMet
 // StreamingResultWithViewsMethod server.
 func (c *Client) StreamingResultWithViewsMethod() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeStreamingResultWithViewsMethodRequest(c.encoder)
 		decodeResponse = DecodeStreamingResultWithViewsMethodResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v interface{}) (interface{}, error) {
@@ -307,14 +298,8 @@ func (c *Client) StreamingResultWithViewsMethod() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		conn, resp, err := c.dialer.DialContext(ctx, req.URL.String(), req.Header)
 		if err != nil {
 			if resp != nil {
@@ -379,7 +364,6 @@ var StreamingResultWithExplicitViewClientEndpointCode = `// StreamingResultWithE
 // StreamingResultWithExplicitViewMethod server.
 func (c *Client) StreamingResultWithExplicitViewMethod() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeStreamingResultWithExplicitViewMethodRequest(c.encoder)
 		decodeResponse = DecodeStreamingResultWithExplicitViewMethodResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v interface{}) (interface{}, error) {
@@ -387,14 +371,8 @@ func (c *Client) StreamingResultWithExplicitViewMethod() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		conn, resp, err := c.dialer.DialContext(ctx, req.URL.String(), req.Header)
 		if err != nil {
 			if resp != nil {
@@ -459,8 +437,8 @@ func (s *StreamingResultWithExplicitViewMethodServerStream) Send(v *streamingres
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -489,8 +467,8 @@ func (s *StreamingResultCollectionWithViewsMethodServerStream) Send(v streamingr
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -568,8 +546,8 @@ func (s *StreamingResultCollectionWithExplicitViewMethodServerStream) Send(v str
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -587,7 +565,6 @@ var StreamingResultCollectionWithExplicitViewClientEndpointCode = `// StreamingR
 // service StreamingResultCollectionWithExplicitViewMethod server.
 func (c *Client) StreamingResultCollectionWithExplicitViewMethod() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeStreamingResultCollectionWithExplicitViewMethodRequest(c.encoder)
 		decodeResponse = DecodeStreamingResultCollectionWithExplicitViewMethodResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v interface{}) (interface{}, error) {
@@ -595,14 +572,8 @@ func (c *Client) StreamingResultCollectionWithExplicitViewMethod() goa.Endpoint 
 		if err != nil {
 			return nil, err
 		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		conn, resp, err := c.dialer.DialContext(ctx, req.URL.String(), req.Header)
 		if err != nil {
 			if resp != nil {
@@ -668,8 +639,8 @@ func (s *StreamingResultPrimitiveMethodServerStream) Send(v string) error {
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -714,8 +685,8 @@ func (s *StreamingResultPrimitiveArrayMethodServerStream) Send(v []int32) error 
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -760,8 +731,8 @@ func (s *StreamingResultPrimitiveMapMethodServerStream) Send(v map[int32]string)
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -806,8 +777,8 @@ func (s *StreamingResultUserTypeArrayMethodServerStream) Send(v []*streamingresu
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -855,8 +826,8 @@ func (s *StreamingResultUserTypeMapMethodServerStream) Send(v map[string]*stream
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -904,9 +875,7 @@ func (c *Client) StreamingResultNoPayloadMethod() goa.Endpoint {
 			return nil, err
 		}
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		conn, resp, err := c.dialer.DialContext(ctx, req.URL.String(), req.Header)
 		if err != nil {
 			if resp != nil {
@@ -938,15 +907,16 @@ var StreamingPayloadServerHandlerInitCode = `// NewStreamingPayloadMethodHandler
 func NewStreamingPayloadMethodHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
-	dec func(*http.Request) goahttp.Decoder,
-	enc func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	eh func(context.Context, http.ResponseWriter, error),
-	up goahttp.Upgrader,
-	connConfigFn goahttp.ConnConfigureFunc,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(err error) goahttp.Statuser,
+	upgrader goahttp.Upgrader,
+	configurer goahttp.ConnConfigureFunc,
 ) http.Handler {
 	var (
-		decodeRequest = DecodeStreamingPayloadMethodRequest(mux, dec)
-		encodeError   = goahttp.ErrorEncoder(enc)
+		decodeRequest = DecodeStreamingPayloadMethodRequest(mux, decoder)
+		encodeError   = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -955,33 +925,31 @@ func NewStreamingPayloadMethodHandler(
 		payload, err := decodeRequest(r)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
-
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		v := &streamingpayloadservice.StreamingPayloadMethodEndpointInput{
 			Stream: &StreamingPayloadMethodServerStream{
-				upgrader:     up,
-				connConfigFn: connConfigFn,
-				cancel:       cancel,
-				w:            w,
-				r:            r,
+				upgrader:   upgrader,
+				configurer: configurer,
+				cancel:     cancel,
+				w:          w,
+				r:          r,
 			},
 			Payload: payload.(*streamingpayloadservice.Payload),
 		}
 		_, err = endpoint(ctx, v)
-
 		if err != nil {
-			if _, ok := err.(websocket.HandshakeError); ok {
+			if _, werr := w.Write(nil); werr == http.ErrHijacked {
+				// Response writer has been hijacked, do not encode the error
+				errhandler(ctx, w, err)
 				return
 			}
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
@@ -1005,7 +973,7 @@ var StreamingPayloadServerStreamRecvCode = `// Recv reads instances of "streamin
 func (s *StreamingPayloadMethodServerStream) Recv() (*streamingpayloadservice.Request, error) {
 	var (
 		rv  *streamingpayloadservice.Request
-		msg **StreamingPayloadMethodStreamingBody
+		msg *StreamingPayloadMethodStreamingBody
 		err error
 	)
 	// Upgrade the HTTP connection to a websocket connection only once. Connection
@@ -1017,8 +985,8 @@ func (s *StreamingPayloadMethodServerStream) Recv() (*streamingpayloadservice.Re
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -1031,8 +999,7 @@ func (s *StreamingPayloadMethodServerStream) Recv() (*streamingpayloadservice.Re
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return NewStreamingPayloadMethodStreamingBody(body), nil
+	return NewStreamingPayloadMethodStreamingBody(msg), nil
 }
 `
 
@@ -1053,9 +1020,7 @@ func (c *Client) StreamingPayloadMethod() goa.Endpoint {
 			return nil, err
 		}
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		conn, resp, err := c.dialer.DialContext(ctx, req.URL.String(), req.Header)
 		if err != nil {
 			if resp != nil {
@@ -1113,41 +1078,41 @@ var StreamingPayloadNoPayloadServerHandlerInitCode = `// NewStreamingPayloadNoPa
 func NewStreamingPayloadNoPayloadMethodHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
-	dec func(*http.Request) goahttp.Decoder,
-	enc func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	eh func(context.Context, http.ResponseWriter, error),
-	up goahttp.Upgrader,
-	connConfigFn goahttp.ConnConfigureFunc,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(err error) goahttp.Statuser,
+	upgrader goahttp.Upgrader,
+	configurer goahttp.ConnConfigureFunc,
 ) http.Handler {
 	var (
-		encodeError = goahttp.ErrorEncoder(enc)
+		encodeError = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "StreamingPayloadNoPayloadMethod")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "StreamingPayloadNoPayloadService")
-
+		var err error
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		v := &streamingpayloadnopayloadservice.StreamingPayloadNoPayloadMethodEndpointInput{
 			Stream: &StreamingPayloadNoPayloadMethodServerStream{
-				upgrader:     up,
-				connConfigFn: connConfigFn,
-				cancel:       cancel,
-				w:            w,
-				r:            r,
+				upgrader:   upgrader,
+				configurer: configurer,
+				cancel:     cancel,
+				w:          w,
+				r:          r,
 			},
 		}
 		_, err = endpoint(ctx, v)
-
 		if err != nil {
-			if _, ok := err.(websocket.HandshakeError); ok {
+			if _, werr := w.Write(nil); werr == http.ErrHijacked {
+				// Response writer has been hijacked, do not encode the error
+				errhandler(ctx, w, err)
 				return
 			}
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
@@ -1168,9 +1133,7 @@ func (c *Client) StreamingPayloadNoPayloadMethod() goa.Endpoint {
 			return nil, err
 		}
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		conn, resp, err := c.dialer.DialContext(ctx, req.URL.String(), req.Header)
 		if err != nil {
 			if resp != nil {
@@ -1239,8 +1202,8 @@ func (s *StreamingPayloadNoResultMethodServerStream) Recv() (string, error) {
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -1253,8 +1216,7 @@ func (s *StreamingPayloadNoResultMethodServerStream) Recv() (string, error) {
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -1332,8 +1294,8 @@ func (s *StreamingPayloadResultWithViewsMethodServerStream) Recv() (float32, err
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -1346,8 +1308,7 @@ func (s *StreamingPayloadResultWithViewsMethodServerStream) Recv() (float32, err
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -1434,8 +1395,8 @@ func (s *StreamingPayloadResultWithExplicitViewMethodServerStream) Recv() (float
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -1448,8 +1409,7 @@ func (s *StreamingPayloadResultWithExplicitViewMethodServerStream) Recv() (float
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -1530,8 +1490,8 @@ func (s *StreamingPayloadResultCollectionWithViewsMethodServerStream) Recv() (in
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -1544,8 +1504,7 @@ func (s *StreamingPayloadResultCollectionWithViewsMethodServerStream) Recv() (in
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -1637,8 +1596,8 @@ func (s *StreamingPayloadResultCollectionWithExplicitViewMethodServerStream) Rec
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -1651,8 +1610,7 @@ func (s *StreamingPayloadResultCollectionWithExplicitViewMethodServerStream) Rec
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -1724,8 +1682,8 @@ func (s *StreamingPayloadPrimitiveMethodServerStream) Recv() (string, error) {
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -1738,8 +1696,7 @@ func (s *StreamingPayloadPrimitiveMethodServerStream) Recv() (string, error) {
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -1790,9 +1747,9 @@ var StreamingPayloadPrimitiveArrayServerStreamRecvCode = `// Recv reads instance
 // "StreamingPayloadPrimitiveArrayMethod" endpoint websocket connection.
 func (s *StreamingPayloadPrimitiveArrayMethodServerStream) Recv() ([]int32, error) {
 	var (
-		rv  []int32
-		msg *[]int32
-		err error
+		rv   []int32
+		body []int32
+		err  error
 	)
 	// Upgrade the HTTP connection to a websocket connection only once. Connection
 	// upgrade is done here so that authorization logic in the endpoint is executed
@@ -1803,21 +1760,20 @@ func (s *StreamingPayloadPrimitiveArrayMethodServerStream) Recv() ([]int32, erro
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
 	if err != nil {
 		return rv, err
 	}
-	if err = s.conn.ReadJSON(&msg); err != nil {
+	if err = s.conn.ReadJSON(&body); err != nil {
 		return rv, err
 	}
-	if msg == nil {
+	if body == nil {
 		return rv, io.EOF
 	}
-	body := *msg
 	return body, nil
 }
 `
@@ -1869,9 +1825,9 @@ var StreamingPayloadPrimitiveMapServerStreamRecvCode = `// Recv reads instances 
 // "StreamingPayloadPrimitiveMapMethod" endpoint websocket connection.
 func (s *StreamingPayloadPrimitiveMapMethodServerStream) Recv() (map[string]int32, error) {
 	var (
-		rv  map[string]int32
-		msg *map[string]int32
-		err error
+		rv   map[string]int32
+		body map[string]int32
+		err  error
 	)
 	// Upgrade the HTTP connection to a websocket connection only once. Connection
 	// upgrade is done here so that authorization logic in the endpoint is executed
@@ -1882,21 +1838,20 @@ func (s *StreamingPayloadPrimitiveMapMethodServerStream) Recv() (map[string]int3
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
 	if err != nil {
 		return rv, err
 	}
-	if err = s.conn.ReadJSON(&msg); err != nil {
+	if err = s.conn.ReadJSON(&body); err != nil {
 		return rv, err
 	}
-	if msg == nil {
+	if body == nil {
 		return rv, io.EOF
 	}
-	body := *msg
 	return body, nil
 }
 `
@@ -1949,9 +1904,9 @@ var StreamingPayloadUserTypeArrayServerStreamRecvCode = `// Recv reads instances
 // "StreamingPayloadUserTypeArrayMethod" endpoint websocket connection.
 func (s *StreamingPayloadUserTypeArrayMethodServerStream) Recv() ([]*streamingpayloadusertypearrayservice.RequestType, error) {
 	var (
-		rv  []*streamingpayloadusertypearrayservice.RequestType
-		msg *[]*RequestType
-		err error
+		rv   []*streamingpayloadusertypearrayservice.RequestType
+		body []*RequestType
+		err  error
 	)
 	// Upgrade the HTTP connection to a websocket connection only once. Connection
 	// upgrade is done here so that authorization logic in the endpoint is executed
@@ -1962,21 +1917,20 @@ func (s *StreamingPayloadUserTypeArrayMethodServerStream) Recv() ([]*streamingpa
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
 	if err != nil {
 		return rv, err
 	}
-	if err = s.conn.ReadJSON(&msg); err != nil {
+	if err = s.conn.ReadJSON(&body); err != nil {
 		return rv, err
 	}
-	if msg == nil {
+	if body == nil {
 		return rv, io.EOF
 	}
-	body := *msg
 	return NewStreamingPayloadUserTypeArrayMethodArray(body), nil
 }
 `
@@ -2031,9 +1985,9 @@ var StreamingPayloadUserTypeMapServerStreamRecvCode = `// Recv reads instances o
 // "StreamingPayloadUserTypeMapMethod" endpoint websocket connection.
 func (s *StreamingPayloadUserTypeMapMethodServerStream) Recv() (map[string]*streamingpayloadusertypemapservice.RequestType, error) {
 	var (
-		rv  map[string]*streamingpayloadusertypemapservice.RequestType
-		msg *map[string]*RequestType
-		err error
+		rv   map[string]*streamingpayloadusertypemapservice.RequestType
+		body map[string]*RequestType
+		err  error
 	)
 	// Upgrade the HTTP connection to a websocket connection only once. Connection
 	// upgrade is done here so that authorization logic in the endpoint is executed
@@ -2044,21 +1998,20 @@ func (s *StreamingPayloadUserTypeMapMethodServerStream) Recv() (map[string]*stre
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
 	if err != nil {
 		return rv, err
 	}
-	if err = s.conn.ReadJSON(&msg); err != nil {
+	if err = s.conn.ReadJSON(&body); err != nil {
 		return rv, err
 	}
-	if msg == nil {
+	if body == nil {
 		return rv, io.EOF
 	}
-	body := *msg
 	return NewStreamingPayloadUserTypeMapMethodMap(body), nil
 }
 `
@@ -2104,15 +2057,16 @@ var BidirectionalStreamingServerHandlerInitCode = `// NewBidirectionalStreamingM
 func NewBidirectionalStreamingMethodHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
-	dec func(*http.Request) goahttp.Decoder,
-	enc func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	eh func(context.Context, http.ResponseWriter, error),
-	up goahttp.Upgrader,
-	connConfigFn goahttp.ConnConfigureFunc,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(err error) goahttp.Statuser,
+	upgrader goahttp.Upgrader,
+	configurer goahttp.ConnConfigureFunc,
 ) http.Handler {
 	var (
-		decodeRequest = DecodeBidirectionalStreamingMethodRequest(mux, dec)
-		encodeError   = goahttp.ErrorEncoder(enc)
+		decodeRequest = DecodeBidirectionalStreamingMethodRequest(mux, decoder)
+		encodeError   = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
@@ -2121,33 +2075,31 @@ func NewBidirectionalStreamingMethodHandler(
 		payload, err := decodeRequest(r)
 		if err != nil {
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
-
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		v := &bidirectionalstreamingservice.BidirectionalStreamingMethodEndpointInput{
 			Stream: &BidirectionalStreamingMethodServerStream{
-				upgrader:     up,
-				connConfigFn: connConfigFn,
-				cancel:       cancel,
-				w:            w,
-				r:            r,
+				upgrader:   upgrader,
+				configurer: configurer,
+				cancel:     cancel,
+				w:          w,
+				r:          r,
 			},
 			Payload: payload.(*bidirectionalstreamingservice.Payload),
 		}
 		_, err = endpoint(ctx, v)
-
 		if err != nil {
-			if _, ok := err.(websocket.HandshakeError); ok {
+			if _, werr := w.Write(nil); werr == http.ErrHijacked {
+				// Response writer has been hijacked, do not encode the error
+				errhandler(ctx, w, err)
 				return
 			}
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
@@ -2168,8 +2120,8 @@ func (s *BidirectionalStreamingMethodServerStream) Send(v *bidirectionalstreamin
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2187,7 +2139,7 @@ var BidirectionalStreamingServerStreamRecvCode = `// Recv reads instances of "bi
 func (s *BidirectionalStreamingMethodServerStream) Recv() (*bidirectionalstreamingservice.Request, error) {
 	var (
 		rv  *bidirectionalstreamingservice.Request
-		msg **BidirectionalStreamingMethodStreamingBody
+		msg *BidirectionalStreamingMethodStreamingBody
 		err error
 	)
 	// Upgrade the HTTP connection to a websocket connection only once. Connection
@@ -2199,8 +2151,8 @@ func (s *BidirectionalStreamingMethodServerStream) Recv() (*bidirectionalstreami
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2213,8 +2165,7 @@ func (s *BidirectionalStreamingMethodServerStream) Recv() (*bidirectionalstreami
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return NewBidirectionalStreamingMethodStreamingBody(body), nil
+	return NewBidirectionalStreamingMethodStreamingBody(msg), nil
 }
 `
 
@@ -2254,9 +2205,7 @@ func (c *Client) BidirectionalStreamingMethod() goa.Endpoint {
 			return nil, err
 		}
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		conn, resp, err := c.dialer.DialContext(ctx, req.URL.String(), req.Header)
 		if err != nil {
 			if resp != nil {
@@ -2320,41 +2269,41 @@ var BidirectionalStreamingNoPayloadServerHandlerInitCode = `// NewBidirectionalS
 func NewBidirectionalStreamingNoPayloadMethodHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
-	dec func(*http.Request) goahttp.Decoder,
-	enc func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	eh func(context.Context, http.ResponseWriter, error),
-	up goahttp.Upgrader,
-	connConfigFn goahttp.ConnConfigureFunc,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(err error) goahttp.Statuser,
+	upgrader goahttp.Upgrader,
+	configurer goahttp.ConnConfigureFunc,
 ) http.Handler {
 	var (
-		encodeError = goahttp.ErrorEncoder(enc)
+		encodeError = goahttp.ErrorEncoder(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "BidirectionalStreamingNoPayloadMethod")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "BidirectionalStreamingNoPayloadService")
-
+		var err error
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		v := &bidirectionalstreamingnopayloadservice.BidirectionalStreamingNoPayloadMethodEndpointInput{
 			Stream: &BidirectionalStreamingNoPayloadMethodServerStream{
-				upgrader:     up,
-				connConfigFn: connConfigFn,
-				cancel:       cancel,
-				w:            w,
-				r:            r,
+				upgrader:   upgrader,
+				configurer: configurer,
+				cancel:     cancel,
+				w:          w,
+				r:          r,
 			},
 		}
 		_, err = endpoint(ctx, v)
-
 		if err != nil {
-			if _, ok := err.(websocket.HandshakeError); ok {
+			if _, werr := w.Write(nil); werr == http.ErrHijacked {
+				// Response writer has been hijacked, do not encode the error
+				errhandler(ctx, w, err)
 				return
 			}
 			if err := encodeError(ctx, w, err); err != nil {
-				eh(ctx, w, err)
+				errhandler(ctx, w, err)
 			}
 			return
 		}
@@ -2393,9 +2342,7 @@ func (c *Client) BidirectionalStreamingNoPayloadMethod() goa.Endpoint {
 			return nil, err
 		}
 		var cancel context.CancelFunc
-		{
-			ctx, cancel = context.WithCancel(ctx)
-		}
+		ctx, cancel = context.WithCancel(ctx)
 		conn, resp, err := c.dialer.DialContext(ctx, req.URL.String(), req.Header)
 		if err != nil {
 			if resp != nil {
@@ -2469,8 +2416,8 @@ func (s *BidirectionalStreamingResultWithViewsMethodServerStream) Send(v *bidire
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2508,8 +2455,8 @@ func (s *BidirectionalStreamingResultWithViewsMethodServerStream) Recv() (float3
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2522,8 +2469,7 @@ func (s *BidirectionalStreamingResultWithViewsMethodServerStream) Recv() (float3
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -2620,8 +2566,8 @@ func (s *BidirectionalStreamingResultWithExplicitViewMethodServerStream) Send(v 
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2652,8 +2598,8 @@ func (s *BidirectionalStreamingResultWithExplicitViewMethodServerStream) Recv() 
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2666,8 +2612,7 @@ func (s *BidirectionalStreamingResultWithExplicitViewMethodServerStream) Recv() 
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -2722,8 +2667,8 @@ func (s *BidirectionalStreamingResultCollectionWithViewsMethodServerStream) Send
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2762,8 +2707,8 @@ func (s *BidirectionalStreamingResultCollectionWithViewsMethodServerStream) Recv
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2776,8 +2721,7 @@ func (s *BidirectionalStreamingResultCollectionWithViewsMethodServerStream) Recv
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -2848,8 +2792,8 @@ func (s *BidirectionalStreamingResultCollectionWithExplicitViewMethodServerStrea
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2880,8 +2824,8 @@ func (s *BidirectionalStreamingResultCollectionWithExplicitViewMethodServerStrea
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2894,8 +2838,7 @@ func (s *BidirectionalStreamingResultCollectionWithExplicitViewMethodServerStrea
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -2946,8 +2889,8 @@ func (s *BidirectionalStreamingPrimitiveMethodServerStream) Send(v string) error
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2976,8 +2919,8 @@ func (s *BidirectionalStreamingPrimitiveMethodServerStream) Recv() (string, erro
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -2990,8 +2933,7 @@ func (s *BidirectionalStreamingPrimitiveMethodServerStream) Recv() (string, erro
 	if msg == nil {
 		return rv, io.EOF
 	}
-	body := *msg
-	return body, nil
+	return *msg, nil
 }
 `
 
@@ -3034,8 +2976,8 @@ func (s *BidirectionalStreamingPrimitiveArrayMethodServerStream) Send(v []string
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -3051,9 +2993,9 @@ var BidirectionalStreamingPrimitiveArrayServerStreamRecvCode = `// Recv reads in
 // "BidirectionalStreamingPrimitiveArrayMethod" endpoint websocket connection.
 func (s *BidirectionalStreamingPrimitiveArrayMethodServerStream) Recv() ([]int32, error) {
 	var (
-		rv  []int32
-		msg *[]int32
-		err error
+		rv   []int32
+		body []int32
+		err  error
 	)
 	// Upgrade the HTTP connection to a websocket connection only once. Connection
 	// upgrade is done here so that authorization logic in the endpoint is executed
@@ -3064,21 +3006,20 @@ func (s *BidirectionalStreamingPrimitiveArrayMethodServerStream) Recv() ([]int32
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
 	if err != nil {
 		return rv, err
 	}
-	if err = s.conn.ReadJSON(&msg); err != nil {
+	if err = s.conn.ReadJSON(&body); err != nil {
 		return rv, err
 	}
-	if msg == nil {
+	if body == nil {
 		return rv, io.EOF
 	}
-	body := *msg
 	return body, nil
 }
 `
@@ -3122,8 +3063,8 @@ func (s *BidirectionalStreamingPrimitiveMapMethodServerStream) Send(v map[int]in
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -3139,9 +3080,9 @@ var BidirectionalStreamingPrimitiveMapServerStreamRecvCode = `// Recv reads inst
 // "BidirectionalStreamingPrimitiveMapMethod" endpoint websocket connection.
 func (s *BidirectionalStreamingPrimitiveMapMethodServerStream) Recv() (map[string]int32, error) {
 	var (
-		rv  map[string]int32
-		msg *map[string]int32
-		err error
+		rv   map[string]int32
+		body map[string]int32
+		err  error
 	)
 	// Upgrade the HTTP connection to a websocket connection only once. Connection
 	// upgrade is done here so that authorization logic in the endpoint is executed
@@ -3152,21 +3093,20 @@ func (s *BidirectionalStreamingPrimitiveMapMethodServerStream) Recv() (map[strin
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
 	if err != nil {
 		return rv, err
 	}
-	if err = s.conn.ReadJSON(&msg); err != nil {
+	if err = s.conn.ReadJSON(&body); err != nil {
 		return rv, err
 	}
-	if msg == nil {
+	if body == nil {
 		return rv, io.EOF
 	}
-	body := *msg
 	return body, nil
 }
 `
@@ -3211,8 +3151,8 @@ func (s *BidirectionalStreamingUserTypeArrayMethodServerStream) Send(v []*bidire
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -3230,9 +3170,9 @@ var BidirectionalStreamingUserTypeArrayServerStreamRecvCode = `// Recv reads ins
 // "BidirectionalStreamingUserTypeArrayMethod" endpoint websocket connection.
 func (s *BidirectionalStreamingUserTypeArrayMethodServerStream) Recv() ([]*bidirectionalstreamingusertypearrayservice.RequestType, error) {
 	var (
-		rv  []*bidirectionalstreamingusertypearrayservice.RequestType
-		msg *[]*RequestType
-		err error
+		rv   []*bidirectionalstreamingusertypearrayservice.RequestType
+		body []*RequestType
+		err  error
 	)
 	// Upgrade the HTTP connection to a websocket connection only once. Connection
 	// upgrade is done here so that authorization logic in the endpoint is executed
@@ -3243,21 +3183,20 @@ func (s *BidirectionalStreamingUserTypeArrayMethodServerStream) Recv() ([]*bidir
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
 	if err != nil {
 		return rv, err
 	}
-	if err = s.conn.ReadJSON(&msg); err != nil {
+	if err = s.conn.ReadJSON(&body); err != nil {
 		return rv, err
 	}
-	if msg == nil {
+	if body == nil {
 		return rv, io.EOF
 	}
-	body := *msg
 	return NewBidirectionalStreamingUserTypeArrayMethodArray(body), nil
 }
 `
@@ -3306,8 +3245,8 @@ func (s *BidirectionalStreamingUserTypeMapMethodServerStream) Send(v map[string]
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
@@ -3325,9 +3264,9 @@ var BidirectionalStreamingUserTypeMapServerStreamRecvCode = `// Recv reads insta
 // "BidirectionalStreamingUserTypeMapMethod" endpoint websocket connection.
 func (s *BidirectionalStreamingUserTypeMapMethodServerStream) Recv() (map[string]*bidirectionalstreamingusertypemapservice.RequestType, error) {
 	var (
-		rv  map[string]*bidirectionalstreamingusertypemapservice.RequestType
-		msg *map[string]*RequestType
-		err error
+		rv   map[string]*bidirectionalstreamingusertypemapservice.RequestType
+		body map[string]*RequestType
+		err  error
 	)
 	// Upgrade the HTTP connection to a websocket connection only once. Connection
 	// upgrade is done here so that authorization logic in the endpoint is executed
@@ -3338,21 +3277,20 @@ func (s *BidirectionalStreamingUserTypeMapMethodServerStream) Recv() (map[string
 		if err != nil {
 			return
 		}
-		if s.connConfigFn != nil {
-			conn = s.connConfigFn(conn, s.cancel)
+		if s.configurer != nil {
+			conn = s.configurer(conn, s.cancel)
 		}
 		s.conn = conn
 	})
 	if err != nil {
 		return rv, err
 	}
-	if err = s.conn.ReadJSON(&msg); err != nil {
+	if err = s.conn.ReadJSON(&body); err != nil {
 		return rv, err
 	}
-	if msg == nil {
+	if body == nil {
 		return rv, io.EOF
 	}
-	body := *msg
 	return NewBidirectionalStreamingUserTypeMapMethodMap(body), nil
 }
 `

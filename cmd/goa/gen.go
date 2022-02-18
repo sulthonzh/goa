@@ -1,11 +1,11 @@
 package main
 
 import (
-	"bufio"
+	"errors"
 	"fmt"
+	"go/build"
 	"go/parser"
 	"go/token"
-	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -39,6 +39,9 @@ type Generator struct {
 
 	// tmpDir is the temporary directory used to compile the generator.
 	tmpDir string
+
+	// hasVendorDirectory is a flag to indicate whether the project uses vendoring
+	hasVendorDirectory bool
 }
 
 // NewGenerator creates a Generator.
@@ -49,13 +52,17 @@ func NewGenerator(cmd string, path, output string) *Generator {
 	}
 
 	var version int
+	var hasVendorDirectory bool
 	{
 		version = 2
 		matched := false
-		pkgs, _ := packages.Load(&packages.Config{Mode: packages.NeedFiles}, path)
+		pkgs, _ := packages.Load(&packages.Config{Mode: packages.NeedFiles | packages.NeedModule}, path)
 		fset := token.NewFileSet()
 		p := regexp.MustCompile(`goa.design/goa/v(\d+)/dsl`)
 		for _, pkg := range pkgs {
+			if _, err := os.Stat(filepath.Join(pkg.Module.Dir, "vendor")); !os.IsNotExist(err) {
+				hasVendorDirectory = true
+			}
 			for _, gof := range pkg.GoFiles {
 				if bs, err := ioutil.ReadFile(gof); err == nil {
 					if f, err := parser.ParseFile(fset, "", string(bs), parser.ImportsOnly); err == nil {
@@ -79,11 +86,12 @@ func NewGenerator(cmd string, path, output string) *Generator {
 	}
 
 	return &Generator{
-		Command:       cmd,
-		DesignPath:    path,
-		Output:        output,
-		DesignVersion: version,
-		bin:           bin,
+		Command:            cmd,
+		DesignPath:         path,
+		Output:             output,
+		DesignVersion:      version,
+		hasVendorDirectory: hasVendorDirectory,
+		bin:                bin,
 	}
 }
 
@@ -143,64 +151,33 @@ func (g *Generator) Write(debug bool) error {
 	return err
 }
 
-const goModEnvKey = "GOMOD"
-
-func findGoMod() string {
-	env := os.Getenv(goModEnvKey)
-	if _, err := exec.LookPath("go"); err != nil {
-		return env
-	}
-	mod, err := exec.Command("go", "env", goModEnvKey).Output()
-	if err != nil {
-		return env
-	}
-	return strings.TrimSpace(string(mod))
-}
-
-func (g *Generator) goaPackage() (string, error) {
-	goaPkg := "goa.design/goa"
-	if g.DesignVersion < 3 {
-		return goaPkg, nil
-	}
-	goaPkg = fmt.Sprintf("goa.design/goa/v%d", g.DesignVersion)
-	path := findGoMod()
-	if _, err := os.Stat(path); err != nil {
-		return goaPkg, nil
-	}
-	fp, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer fp.Close()
-	return parseGoModGoaPackage(goaPkg, fp)
-}
-
-var reMod = regexp.MustCompile(`^\s*(?:require )?\s*(goa\.design/goa/v\d+?)\s+([^\/]\S+?)\s*(?:\/\/.+)?$`)
-
-func parseGoModGoaPackage(pkg string, r io.Reader) (string, error) {
-	s := bufio.NewScanner(r)
-	for s.Scan() {
-		match := reMod.FindStringSubmatch(s.Text())
-		if len(match) == 3 && match[1] == pkg {
-			return match[1] + "@" + match[2], nil
-		}
-	}
-	if err := s.Err(); err != nil {
-		return "", fmt.Errorf("scan error, %v", err)
-	}
-	return pkg, nil
-}
-
 // Compile compiles the generator.
 func (g *Generator) Compile() error {
-	goaPkg, err := g.goaPackage()
+	// We first need to go get the generated package to make sure that all
+	// dependencies are added to go.sum prior to compiling.
+	pkgs, err := packages.Load(&packages.Config{Mode: packages.NeedName}, fmt.Sprintf(".%c%s", filepath.Separator, g.tmpDir))
 	if err != nil {
 		return err
 	}
-	if err := g.runGoCmd("get", goaPkg); err != nil {
-		return err
+	if len(pkgs) != 1 {
+		return fmt.Errorf("expected to find one package in %s", g.tmpDir)
 	}
-	return g.runGoCmd("build", "-o", g.bin)
+	if !g.hasVendorDirectory {
+		if err := g.runGoCmd("get", pkgs[0].PkgPath); err != nil {
+			return err
+		}
+	}
+
+	err = g.runGoCmd("build", "-o", g.bin)
+
+	// If we're in vendor context we check the error string to see if it's an issue of unsatisfied dependencies
+	if err != nil && g.hasVendorDirectory {
+		if strings.Contains(err.Error(), "cannot find package") && strings.Contains(err.Error(), "/goa.design/goa/v3/codegen/generator") {
+			return errors.New("generated code expected `goa.design/goa/v3/codegen/generator` to be present in the vendor directory, see documentation for more details")
+		}
+	}
+
+	return err
 }
 
 // Run runs the compiled binary and return the output lines.
@@ -209,10 +186,13 @@ func (g *Generator) Run() ([]string, error) {
 	{
 		args := make([]string, len(os.Args)-1)
 		gopaths := filepath.SplitList(os.Getenv("GOPATH"))
+		if len(gopaths) == 0 {
+			gopaths = []string{build.Default.GOPATH}
+		}
 		for i, a := range os.Args[1:] {
 			for _, p := range gopaths {
-				if strings.Contains(a, p) {
-					args[i] = strings.Replace(a, p, "$(GOPATH)", -1)
+				if strings.HasPrefix(a, p) {
+					args[i] = strings.Replace(a, p, "$(GOPATH)", 1)
 					break
 				}
 			}

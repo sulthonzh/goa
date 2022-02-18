@@ -33,6 +33,7 @@ var SingleServerSingleHostDSL = func() {
 				URI("http://example:8090")
 				URI("https://example:80")
 				URI("grpc://example:8080")
+				URI("http://[::1]:8080")
 			})
 		})
 	})
@@ -203,6 +204,79 @@ var SingleServerMultipleHostsWithVariablesDSL = func() {
 		Method("Method", func() {
 			HTTP(func() {
 				GET("/")
+			})
+		})
+	})
+}
+
+var ServiceForOnlyHTTPDSL = func() {
+	Service("Service", func() {
+		Method("Method", func() {
+			HTTP(func() {
+				GET("/")
+			})
+		})
+	})
+}
+
+var ServiceForOnlyGRPCDSL = func() {
+	Service("Service", func() {
+		Method("Method", func() {
+			GRPC(func() {})
+		})
+	})
+}
+
+var ServiceForHTTPAndPartOfGRPCDSL = func() {
+	Service("Service", func() {
+		Method("Method", func() {
+			HTTP(func() {
+				GET("/")
+			})
+			GRPC(func() {})
+		})
+	})
+	Service("AnotherService", func() {
+		Method("Method", func() {
+			HTTP(func() {
+				GET("/")
+			})
+		})
+	})
+}
+
+var ConflictWithAPINameAndServiceNamesIncludingMultipartDSL = func() {
+	var _ = API("aloha", func() {
+		Title("conflict with API name and service names including multipart")
+	})
+	var _ = Service("aloha", func() { // same as API name
+		Method("create", func() {
+			Payload(func() {
+				Attribute("price", Int)
+			})
+			HTTP(func() {
+				POST("/aloha")
+				MultipartRequest()
+			})
+		})
+	})
+	var _ = Service("alohaapi", func() { // API name + 'api' suffix
+		Method("create", func() {
+			Payload(func() {
+				Attribute("price", Int)
+			})
+			HTTP(func() {
+				POST("/aloha")
+			})
+		})
+	})
+	var _ = Service("alohaapi1", func() { // API name + 'api' suffix + sequential no.
+		Method("create", func() {
+			Payload(func() {
+				Attribute("price", Int)
+			})
+			HTTP(func() {
+				POST("/aloha")
 			})
 		})
 	})

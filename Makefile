@@ -1,103 +1,126 @@
 #! /usr/bin/make
 #
-# Makefile for goa v2
+# Makefile for Goa v3
 #
 # Targets:
 # - "depend" retrieves the Go packages needed to run the linter and tests
-# - "lint" runs the linter and checks the code format using goimports
+# - "lint" runs the linter
 # - "test" runs the tests
+# - "release" creates a new release commit, tags the commit and pushes the tag to GitHub.
+#   "release" also updates the examples and plugins repo and pushes the updates to GitHub.
 #
 # Meta targets:
-# - "all" is the default target, it runs all the targets in the order above.
+# - "all" is the default target, it runs "lint" and "test"
 #
+MAJOR=3
+MINOR=5
+BUILD=5
+
 GOOS=$(shell go env GOOS)
 GO_FILES=$(shell find . -type f -name '*.go')
-
-ifeq ($(GOOS),windows)
-EXAMPLES_DIR="$(GOPATH)\src\goa.design\examples"
-PLUGINS_DIR="$(GOPATH)\src\goa.design\plugins"
-GOBIN="$(GOPATH)\bin"
-else
-EXAMPLES_DIR=$(GOPATH)/src/goa.design/examples
-PLUGINS_DIR=$(GOPATH)/src/goa.design/plugins
-GOBIN=$(GOPATH)/bin
-endif
+GOPATH=$(shell go env GOPATH)
 
 # Only list test and build dependencies
 # Standard dependencies are installed via go get
 DEPEND=\
-	golang.org/x/lint/golint \
-	golang.org/x/tools/cmd/goimports \
-	github.com/cheggaaa/pb \
-	github.com/hashicorp/go-getter \
-	github.com/golang/protobuf/protoc-gen-go \
-	github.com/golang/protobuf/proto \
-	honnef.co/go/tools/cmd/staticcheck
+	golang.org/x/lint/golint@v0.0.0-20210508222113-6edffad5e616  \
+	google.golang.org/protobuf/cmd/protoc-gen-go@v1.27.1 \
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.1 \
+	honnef.co/go/tools/cmd/staticcheck@v0.2.1
 
 all: lint test
 
-travis: depend all test-examples test-plugins
+travis: depend all #test-examples test-plugins
 
 # Install protoc
-PROTOC_VERSION=3.6.1
+PROTOC_VERSION=3.17.3
+UNZIP=unzip
 ifeq ($(GOOS),linux)
-PROTOC=protoc-$(PROTOC_VERSION)-linux-x86_64
-PROTOC_EXEC=$(PROTOC)/bin/protoc
-else
-	ifeq ($(GOOS),darwin)
-PROTOC=protoc-$(PROTOC_VERSION)-osx-x86_64
-PROTOC_EXEC=$(PROTOC)/bin/protoc
-	else
-		ifeq ($(GOOS),windows)
-PROTOC=protoc-$(PROTOC_VERSION)-win32
-PROTOC_EXEC="$(PROTOC)\bin\protoc.exe"
-		endif
-	endif
+	PROTOC=protoc-$(PROTOC_VERSION)-linux-x86_64
+	PROTOC_EXEC=$(PROTOC)/bin/protoc
 endif
+ifeq ($(GOOS),darwin)
+	PROTOC=protoc-$(PROTOC_VERSION)-osx-x86_64
+	PROTOC_EXEC=$(PROTOC)/bin/protoc
+endif
+ifeq ($(GOOS),windows)
+	PROTOC=protoc-$(PROTOC_VERSION)-win32
+	PROTOC_EXEC="$(PROTOC)\bin\protoc.exe"
+	GOPATH:=$(subst \,/,$(GOPATH))
+endif
+
 depend:
-	@go get -v $(DEPEND)
-	@go install github.com/hashicorp/go-getter/cmd/go-getter && \
-		go-getter https://github.com/google/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC).zip $(PROTOC) && \
-		cp $(PROTOC_EXEC) $(GOBIN) && \
+	@echo INSTALLING DEPENDENCIES...
+	@go mod download
+	@for package in $(DEPEND); do go install $$package; done
+	@go mod tidy -compat=1.17
+	@echo INSTALLING PROTOC...
+	@mkdir $(PROTOC)
+	@cd $(PROTOC); \
+	curl -O -L https://github.com/google/protobuf/releases/download/v$(PROTOC_VERSION)/$(PROTOC).zip; \
+	$(UNZIP) $(PROTOC).zip
+	@cp $(PROTOC_EXEC) $(GOPATH)/bin && \
 		rm -r $(PROTOC) && \
 		echo "`protoc --version`"
-	@go install github.com/golang/protobuf/protoc-gen-go
-	@go get -t -v ./...
 
 lint:
-	@if [ "`goimports -l $(GO_FILES) | tee /dev/stderr`" ]; then \
-		echo "^ - Repo contains improperly formatted go files" && echo && exit 1; \
-	fi
+ifneq ($(GOOS),windows)
 	@if [ "`golint ./... | grep -vf .golint_exclude | tee /dev/stderr`" ]; then \
 		echo "^ - Lint errors!" && echo && exit 1; \
 	fi
-	@if [ "`staticcheck -checks all ./... | grep -v ".pb.go" | tee /dev/stderr`" ]; then \
+	@if [ "`staticcheck -checks all ./... | grep -v ".pb.go" | grep -v "SA1019" | tee /dev/stderr`" ]; then \
 		echo "^ - staticcheck errors!" && echo && exit 1; \
 	fi
+endif
 
 test:
-	env GO111MODULE=on go test ./...
+	go test ./...
 
-test-examples:
-	@if [ -z $(GOA_BRANCH) ]; then\
-		GOA_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-	fi
-	@if [ ! -d $(EXAMPLES_DIR) ]; then\
-		git clone https://github.com/goadesign/examples.git $(EXAMPLES_DIR); \
-	fi
-	@cd $(EXAMPLES_DIR) && git checkout $(GOA_BRANCH) || echo "Using master branch in examples repo" && \
-	make -k travis || (echo "Tests in examples repo (https://github.com/goadesign/examples) failed" \
-                  "due to changes in goa repo (branch: $(GOA_BRANCH))!" \
-                  "Create a branch with name '$(GOA_BRANCH)' in the examples repo and fix these errors." && exit 1)
+release: release-goa release-examples release-plugins
 
-test-plugins:
-	@if [ -z $(GOA_BRANCH) ]; then\
-		GOA_BRANCH=$$(git rev-parse --abbrev-ref HEAD); \
-	fi
-	@if [ ! -d $(PLUGINS_DIR) ]; then\
-		git clone https://github.com/goadesign/plugins.git $(PLUGINS_DIR); \
-	fi
-	@cd $(PLUGINS_DIR) && git checkout $(GOA_BRANCH) || echo "Using master branch in plugins repo" && \
-	make -k test-plugins || (echo "Tests in plugin repo (https://github.com/goadesign/plugins) failed" \
-                  "due to changes in goa repo (branch: $(GOA_BRANCH))!" \
-                  "Create a branch with name '$(GOA_BRANCH)' in the plugin repo and fix these errors." && exit 1)
+release-goa:
+	# First make sure all is clean
+	git diff-index --quiet HEAD
+	cd $(GOPATH)/src/goa.design/examples && \
+		git checkout master && \
+		git pull origin master && \
+		git diff-index --quiet HEAD
+	cd $(GOPATH)/src/goa.design/plugins && \
+		git checkout v$(MAJOR) && \
+		git pull origin v$(MAJOR) && \
+		git diff-index --quiet HEAD
+	go mod tidy -compat=1.17
+	# Bump version number, commit and push
+	sed 's/Major = .*/Major = $(MAJOR)/' pkg/version.go > _tmp && mv _tmp pkg/version.go
+	sed 's/Minor = .*/Minor = $(MINOR)/' pkg/version.go > _tmp && mv _tmp pkg/version.go
+	sed 's/Build = .*/Build = $(BUILD)/' pkg/version.go > _tmp && mv _tmp pkg/version.go
+	sed 's/Current Release: `v3\..*/Current Release: `v$(MAJOR).$(MINOR).$(BUILD)`/' README.md > _tmp && mv _tmp README.md
+	sed 's/goa\/v3@v.*tab=doc/goa\/v3@v$(MAJOR).$(MINOR).$(BUILD)\/dsl?tab=doc/' README.md > _tmp && mv _tmp README.md
+	git add .
+	git commit -m "Release v$(MAJOR).$(MINOR).$(BUILD)"
+	git tag v$(MAJOR).$(MINOR).$(BUILD)
+	cd cmd/goa && go install
+	git push origin v$(MAJOR)
+	git push origin v$(MAJOR).$(MINOR).$(BUILD)
+
+release-examples:
+	cd $(GOPATH)/src/goa.design/examples && \
+		sed 's/goa.design\/goa\/v.*/goa.design\/goa\/v$(MAJOR) v$(MAJOR).$(MINOR).$(BUILD)/' go.mod > _tmp && mv _tmp go.mod && \
+		make && \
+		git add . && \
+		git commit -m "Release v$(MAJOR).$(MINOR).$(BUILD)" && \
+		git tag v$(MAJOR).$(MINOR).$(BUILD) && \
+		git push origin master && \
+		git push origin v$(MAJOR).$(MINOR).$(BUILD)
+
+release-plugins:
+	cd $(GOPATH)/src/goa.design/plugins && \
+		sed 's/goa.design\/goa\/v.*/goa.design\/goa\/v$(MAJOR) v$(MAJOR).$(MINOR).$(BUILD)/' go.mod > _tmp && mv _tmp go.mod && \
+		make && \
+		git add . && \
+		git commit -m "Release v$(MAJOR).$(MINOR).$(BUILD)" && \
+		git tag v$(MAJOR).$(MINOR).$(BUILD) && \
+		git push origin v$(MAJOR) && \
+		git push origin v$(MAJOR).$(MINOR).$(BUILD)
+	echo DONE RELEASING v$(MAJOR).$(MINOR).$(BUILD)!
+

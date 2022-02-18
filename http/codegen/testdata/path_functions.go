@@ -6,6 +6,42 @@ func MethodPathNoParamServicePathNoParamPath() string {
 }
 `
 
+var BasePathNoTrailing_SlashWithBasePathNoTrailingCode = `// SlashWithBasePathNoTrailingBasePathNoTrailingPath returns the URL path to the BasePathNoTrailing service SlashWithBasePathNoTrailing HTTP endpoint.
+func SlashWithBasePathNoTrailingBasePathNoTrailingPath() string {
+	return "/foo"
+}
+`
+
+var BasePathNoTrailing_TrailingWithBasePathNoTrailingCode = `// TrailingWithBasePathNoTrailingBasePathNoTrailingPath returns the URL path to the BasePathNoTrailing service TrailingWithBasePathNoTrailing HTTP endpoint.
+func TrailingWithBasePathNoTrailingBasePathNoTrailingPath() string {
+	return "/foo/bar/"
+}
+`
+
+var BasePathWithTrailingSlash_WithBasePathWithTrailingCode = `// SlashWithBasePathWithTrailingBasePathWithTrailingPath returns the URL path to the BasePathWithTrailing service SlashWithBasePathWithTrailing HTTP endpoint.
+func SlashWithBasePathWithTrailingBasePathWithTrailingPath() string {
+	return "/foo/"
+}
+`
+
+var NoBasePath_SlashNoBasePathCode = `// SlashNoBasePathNoBasePathPath returns the URL path to the NoBasePath service SlashNoBasePath HTTP endpoint.
+func SlashNoBasePathNoBasePathPath() string {
+	return "/"
+}
+`
+
+var NoBasePath_TrailingNoBasePathCode = `// TrailingNoBasePathNoBasePathPath returns the URL path to the NoBasePath service TrailingNoBasePath HTTP endpoint.
+func TrailingNoBasePathNoBasePathPath() string {
+	return "/foo/"
+}
+`
+
+var BasePath_SpecialTrailingSlashCode = `// SpecialTrailingSlashBasePathPath returns the URL path to the BasePath service SpecialTrailingSlash HTTP endpoint.
+func SpecialTrailingSlashBasePathPath() string {
+	return "/foo/"
+}
+`
+
 var PathOneParamCode = `// MethodPathOneParamServicePathOneParamPath returns the URL path to the ServicePathOneParam service MethodPathOneParam HTTP endpoint.
 func MethodPathOneParamServicePathOneParamPath(a string) string {
 	return fmt.Sprintf("/one/%v/two", a)
@@ -35,7 +71,7 @@ func MethodPathStringSliceParamServicePathStringSliceParamPath(a []string) strin
 	for i, v := range a {
 		aSlice[i] = url.QueryEscape(v)
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `
 
@@ -45,7 +81,7 @@ func MethodPathIntSliceParamServicePathIntSliceParamPath(a []int) string {
 	for i, v := range a {
 		aSlice[i] = strconv.FormatInt(int64(v), 10)
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `
 
@@ -55,7 +91,7 @@ func MethodPathInt32SliceParamServicePathInt32SliceParamPath(a []int32) string {
 	for i, v := range a {
 		aSlice[i] = strconv.FormatInt(int64(v), 10)
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `
 
@@ -65,7 +101,7 @@ func MethodPathInt64SliceParamServicePathInt64SliceParamPath(a []int64) string {
 	for i, v := range a {
 		aSlice[i] = strconv.FormatInt(v, 10)
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `
 
@@ -75,7 +111,7 @@ func MethodPathUintSliceParamServicePathUintSliceParamPath(a []uint) string {
 	for i, v := range a {
 		aSlice[i] = strconv.FormatUint(uint64(v), 10)
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `
 
@@ -85,7 +121,7 @@ func MethodPathUint32SliceParamServicePathUint32SliceParamPath(a []uint32) strin
 	for i, v := range a {
 		aSlice[i] = strconv.FormatUint(uint64(v), 10)
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `
 
@@ -95,7 +131,7 @@ func MethodPathUint64SliceParamServicePathUint64SliceParamPath(a []uint64) strin
 	for i, v := range a {
 		aSlice[i] = strconv.FormatUint(v, 10)
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `
 
@@ -105,7 +141,7 @@ func MethodPathFloat32SliceParamServicePathFloat32SliceParamPath(a []float32) st
 	for i, v := range a {
 		aSlice[i] = strconv.FormatFloat(float64(v), 'f', -1, 32)
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `
 
@@ -115,7 +151,7 @@ func MethodPathFloat64SliceParamServicePathFloat64SliceParamPath(a []float64) st
 	for i, v := range a {
 		aSlice[i] = strconv.FormatFloat(v, 'f', -1, 64)
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `
 
@@ -125,7 +161,7 @@ func MethodPathBoolSliceParamServicePathBoolSliceParamPath(a []bool) string {
 	for i, v := range a {
 		aSlice[i] = strconv.FormatBool(v)
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `
 
@@ -135,6 +171,6 @@ func MethodPathInterfaceSliceParamServicePathInterfaceSliceParamPath(a []interfa
 	for i, v := range a {
 		aSlice[i] = url.QueryEscape(fmt.Sprintf("%v", v))
 	}
-	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ", "))
+	return fmt.Sprintf("/one/%v/two", strings.Join(aSlice, ","))
 }
 `

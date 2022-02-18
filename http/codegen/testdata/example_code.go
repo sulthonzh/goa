@@ -16,7 +16,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 	// Provide the transport specific request decoder and response encoder.
 	// The goa http package has built-in support for JSON, XML and gob.
 	// Other encodings can be used by providing the corresponding functions,
-	// see goa.design/encoding.
+	// see goa.design/implement/encoding.
 	var (
 		dec = goahttp.RequestDecoder
 		enc = goahttp.ResponseEncoder
@@ -38,7 +38,13 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 	)
 	{
 		eh := errorHandler(logger)
-		serviceServer = servicesvr.New(serviceEndpoints, mux, dec, enc, eh)
+		serviceServer = servicesvr.New(serviceEndpoints, mux, dec, enc, eh, nil)
+		if debug {
+			servers := goahttp.Servers{
+				serviceServer,
+			}
+			servers.Use(httpmdlwr.Debug(mux, os.Stdout))
+		}
 	}
 	// Configure the mux.
 	servicesvr.Mount(mux, serviceServer)
@@ -47,9 +53,6 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 	// here apply to all the service endpoints.
 	var handler http.Handler = mux
 	{
-		if debug {
-			handler = httpmdlwr.Debug(mux, os.Stdout)(handler)
-		}
 		handler = httpmdlwr.Log(adapter)(handler)
 		handler = httpmdlwr.RequestID()(handler)
 	}
@@ -75,10 +78,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 		logger.Printf("shutting down HTTP server at %q", u.Host)
 
 		// Shutdown gracefully with a 30s timeout.
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
 	}()
 }
 
@@ -88,7 +91,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 func errorHandler(logger *log.Logger) func(context.Context, http.ResponseWriter, error) {
 	return func(ctx context.Context, w http.ResponseWriter, err error) {
 		id := ctx.Value(middleware.RequestIDKey).(string)
-		w.Write([]byte("[" + id + "] encoding: " + err.Error()))
+		_, _ = w.Write([]byte("[" + id + "] encoding: " + err.Error()))
 		logger.Printf("[%s] ERROR: %s", id, err.Error())
 	}
 }
@@ -109,7 +112,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, wg *sync.WaitGroup, errc 
 	// Provide the transport specific request decoder and response encoder.
 	// The goa http package has built-in support for JSON, XML and gob.
 	// Other encodings can be used by providing the corresponding functions,
-	// see goa.design/encoding.
+	// see goa.design/implement/encoding.
 	var (
 		dec = goahttp.RequestDecoder
 		enc = goahttp.ResponseEncoder
@@ -131,18 +134,21 @@ func handleHTTPServer(ctx context.Context, u *url.URL, wg *sync.WaitGroup, errc 
 	)
 	{
 		eh := errorHandler(logger)
-		serviceServer = servicesvr.New(nil, mux, dec, enc, eh)
+		serviceServer = servicesvr.New(nil, mux, dec, enc, eh, nil, nil)
+		if debug {
+			servers := goahttp.Servers{
+				serviceServer,
+			}
+			servers.Use(httpmdlwr.Debug(mux, os.Stdout))
+		}
 	}
 	// Configure the mux.
-	servicesvr.Mount(mux)
+	servicesvr.Mount(mux, serviceServer)
 
 	// Wrap the multiplexer with additional middlewares. Middlewares mounted
 	// here apply to all the service endpoints.
 	var handler http.Handler = mux
 	{
-		if debug {
-			handler = httpmdlwr.Debug(mux, os.Stdout)(handler)
-		}
 		handler = httpmdlwr.Log(adapter)(handler)
 		handler = httpmdlwr.RequestID()(handler)
 	}
@@ -168,10 +174,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, wg *sync.WaitGroup, errc 
 		logger.Printf("shutting down HTTP server at %q", u.Host)
 
 		// Shutdown gracefully with a 30s timeout.
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
 	}()
 }
 
@@ -181,7 +187,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, wg *sync.WaitGroup, errc 
 func errorHandler(logger *log.Logger) func(context.Context, http.ResponseWriter, error) {
 	return func(ctx context.Context, w http.ResponseWriter, err error) {
 		id := ctx.Value(middleware.RequestIDKey).(string)
-		w.Write([]byte("[" + id + "] encoding: " + err.Error()))
+		_, _ = w.Write([]byte("[" + id + "] encoding: " + err.Error()))
 		logger.Printf("[%s] ERROR: %s", id, err.Error())
 	}
 }
@@ -202,7 +208,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 	// Provide the transport specific request decoder and response encoder.
 	// The goa http package has built-in support for JSON, XML and gob.
 	// Other encodings can be used by providing the corresponding functions,
-	// see goa.design/encoding.
+	// see goa.design/implement/encoding.
 	var (
 		dec = goahttp.RequestDecoder
 		enc = goahttp.ResponseEncoder
@@ -224,7 +230,13 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 	)
 	{
 		eh := errorHandler(logger)
-		serviceServer = servicesvr.New(serviceEndpoints, mux, dec, enc, eh)
+		serviceServer = servicesvr.New(serviceEndpoints, mux, dec, enc, eh, nil)
+		if debug {
+			servers := goahttp.Servers{
+				serviceServer,
+			}
+			servers.Use(httpmdlwr.Debug(mux, os.Stdout))
+		}
 	}
 	// Configure the mux.
 	servicesvr.Mount(mux, serviceServer)
@@ -233,9 +245,6 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 	// here apply to all the service endpoints.
 	var handler http.Handler = mux
 	{
-		if debug {
-			handler = httpmdlwr.Debug(mux, os.Stdout)(handler)
-		}
 		handler = httpmdlwr.Log(adapter)(handler)
 		handler = httpmdlwr.RequestID()(handler)
 	}
@@ -261,10 +270,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 		logger.Printf("shutting down HTTP server at %q", u.Host)
 
 		// Shutdown gracefully with a 30s timeout.
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
 	}()
 }
 
@@ -274,7 +283,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 func errorHandler(logger *log.Logger) func(context.Context, http.ResponseWriter, error) {
 	return func(ctx context.Context, w http.ResponseWriter, err error) {
 		id := ctx.Value(middleware.RequestIDKey).(string)
-		w.Write([]byte("[" + id + "] encoding: " + err.Error()))
+		_, _ = w.Write([]byte("[" + id + "] encoding: " + err.Error()))
 		logger.Printf("[%s] ERROR: %s", id, err.Error())
 	}
 }
@@ -295,7 +304,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 	// Provide the transport specific request decoder and response encoder.
 	// The goa http package has built-in support for JSON, XML and gob.
 	// Other encodings can be used by providing the corresponding functions,
-	// see goa.design/encoding.
+	// see goa.design/implement/encoding.
 	var (
 		dec = goahttp.RequestDecoder
 		enc = goahttp.ResponseEncoder
@@ -318,8 +327,15 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 	)
 	{
 		eh := errorHandler(logger)
-		serviceServer = servicesvr.New(serviceEndpoints, mux, dec, enc, eh)
-		anotherServiceServer = anotherservicesvr.New(anotherServiceEndpoints, mux, dec, enc, eh)
+		serviceServer = servicesvr.New(serviceEndpoints, mux, dec, enc, eh, nil)
+		anotherServiceServer = anotherservicesvr.New(anotherServiceEndpoints, mux, dec, enc, eh, nil)
+		if debug {
+			servers := goahttp.Servers{
+				serviceServer,
+				anotherServiceServer,
+			}
+			servers.Use(httpmdlwr.Debug(mux, os.Stdout))
+		}
 	}
 	// Configure the mux.
 	servicesvr.Mount(mux, serviceServer)
@@ -329,9 +345,6 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 	// here apply to all the service endpoints.
 	var handler http.Handler = mux
 	{
-		if debug {
-			handler = httpmdlwr.Debug(mux, os.Stdout)(handler)
-		}
 		handler = httpmdlwr.Log(adapter)(handler)
 		handler = httpmdlwr.RequestID()(handler)
 	}
@@ -360,10 +373,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 		logger.Printf("shutting down HTTP server at %q", u.Host)
 
 		// Shutdown gracefully with a 30s timeout.
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
 	}()
 }
 
@@ -373,7 +386,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 func errorHandler(logger *log.Logger) func(context.Context, http.ResponseWriter, error) {
 	return func(ctx context.Context, w http.ResponseWriter, err error) {
 		id := ctx.Value(middleware.RequestIDKey).(string)
-		w.Write([]byte("[" + id + "] encoding: " + err.Error()))
+		_, _ = w.Write([]byte("[" + id + "] encoding: " + err.Error()))
 		logger.Printf("[%s] ERROR: %s", id, err.Error())
 	}
 }
@@ -394,7 +407,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, streamingServiceAEndpoint
 	// Provide the transport specific request decoder and response encoder.
 	// The goa http package has built-in support for JSON, XML and gob.
 	// Other encodings can be used by providing the corresponding functions,
-	// see goa.design/encoding.
+	// see goa.design/implement/encoding.
 	var (
 		dec = goahttp.RequestDecoder
 		enc = goahttp.ResponseEncoder
@@ -418,8 +431,15 @@ func handleHTTPServer(ctx context.Context, u *url.URL, streamingServiceAEndpoint
 	{
 		eh := errorHandler(logger)
 		upgrader := &websocket.Upgrader{}
-		streamingServiceAServer = streamingserviceasvr.New(streamingServiceAEndpoints, mux, dec, enc, eh, upgrader, nil)
-		streamingServiceBServer = streamingservicebsvr.New(streamingServiceBEndpoints, mux, dec, enc, eh, upgrader, nil)
+		streamingServiceAServer = streamingserviceasvr.New(streamingServiceAEndpoints, mux, dec, enc, eh, nil, upgrader, nil)
+		streamingServiceBServer = streamingservicebsvr.New(streamingServiceBEndpoints, mux, dec, enc, eh, nil, upgrader, nil)
+		if debug {
+			servers := goahttp.Servers{
+				streamingServiceAServer,
+				streamingServiceBServer,
+			}
+			servers.Use(httpmdlwr.Debug(mux, os.Stdout))
+		}
 	}
 	// Configure the mux.
 	streamingserviceasvr.Mount(mux, streamingServiceAServer)
@@ -429,9 +449,6 @@ func handleHTTPServer(ctx context.Context, u *url.URL, streamingServiceAEndpoint
 	// here apply to all the service endpoints.
 	var handler http.Handler = mux
 	{
-		if debug {
-			handler = httpmdlwr.Debug(mux, os.Stdout)(handler)
-		}
 		handler = httpmdlwr.Log(adapter)(handler)
 		handler = httpmdlwr.RequestID()(handler)
 	}
@@ -460,10 +477,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, streamingServiceAEndpoint
 		logger.Printf("shutting down HTTP server at %q", u.Host)
 
 		// Shutdown gracefully with a 30s timeout.
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		srv.Shutdown(ctx)
+		_ = srv.Shutdown(ctx)
 	}()
 }
 
@@ -473,7 +490,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, streamingServiceAEndpoint
 func errorHandler(logger *log.Logger) func(context.Context, http.ResponseWriter, error) {
 	return func(ctx context.Context, w http.ResponseWriter, err error) {
 		id := ctx.Value(middleware.RequestIDKey).(string)
-		w.Write([]byte("[" + id + "] encoding: " + err.Error()))
+		_, _ = w.Write([]byte("[" + id + "] encoding: " + err.Error()))
 		logger.Printf("[%s] ERROR: %s", id, err.Error())
 	}
 }

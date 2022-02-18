@@ -22,6 +22,7 @@ func TestClientDecode(t *testing.T) {
 		{"explicit-body-result-collection", testdata.ExplicitBodyResultCollectionDSL, testdata.ExplicitBodyResultCollectionDecodeCode},
 		{"tag-result-multiple-views", testdata.ResultMultipleViewsTagDSL, testdata.ResultMultipleViewsTagDecodeCode},
 		{"empty-server-response-with-tags", testdata.EmptyServerResponseWithTagsDSL, testdata.EmptyServerResponseWithTagsDecodeCode},
+		{"header-string-implicit", testdata.ResultHeaderStringImplicitDSL, testdata.ResultHeaderStringImplicitResponseDecodeCode},
 		{"header-string-array", testdata.ResultHeaderStringArrayDSL, testdata.ResultHeaderStringArrayResponseDecodeCode},
 		{"header-string-array-validate", testdata.ResultHeaderStringArrayValidateDSL, testdata.ResultHeaderStringArrayValidateResponseDecodeCode},
 		{"header-array", testdata.ResultHeaderArrayDSL, testdata.ResultHeaderArrayResponseDecodeCode},
@@ -29,6 +30,7 @@ func TestClientDecode(t *testing.T) {
 		{"with-headers-dsl", testdata.WithHeadersBlockDSL, testdata.WithHeadersBlockResponseDecodeCode},
 		{"with-headers-dsl-viewed-result", testdata.WithHeadersBlockViewedResultDSL, testdata.WithHeadersBlockViewedResultResponseDecodeCode},
 		{"validate-error-response-type", testdata.ValidateErrorResponseTypeDSL, testdata.ValidateErrorResponseTypeDecodeCode},
+		{"empty-error-response-body", testdata.EmptyErrorResponseBodyDSL, testdata.EmptyErrorResponseBodyDecodeCode},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {

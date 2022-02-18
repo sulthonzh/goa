@@ -53,7 +53,13 @@ func init() {
 //
 // `proto` param if true indicates that the target is a protocol buffer type
 //
-func protoBufTransform(source, target *expr.AttributeExpr, sourceVar, targetVar string, sourceCtx, targetCtx *codegen.AttributeContext, proto bool) (string, []*codegen.TransformFunctionData, error) {
+// newVar if true initializes a target variable with the generated Go code
+// using `:=` operator. If false, it assigns Go code to the target variable
+// using `=`.
+//
+func protoBufTransform(source, target *expr.AttributeExpr, sourceVar, targetVar string, sourceCtx, targetCtx *codegen.AttributeContext, proto, newVar bool) (string, []*codegen.TransformFunctionData, error) {
+	source = unAlias(source)
+	target = unAlias(target)
 	var prefix string
 	{
 		prefix = "protobuf"
@@ -70,7 +76,15 @@ func protoBufTransform(source, target *expr.AttributeExpr, sourceVar, targetVar 
 		proto: proto,
 	}
 
-	code, err := transformAttribute(source, target, sourceVar, targetVar, true, ta)
+	if proto {
+		target = expr.DupAtt(target)
+		removeMeta(target)
+	} else {
+		source = expr.DupAtt(source)
+		removeMeta(source)
+	}
+
+	code, err := transformAttribute(source, target, sourceVar, targetVar, newVar, ta)
 	if err != nil {
 		return "", nil, err
 	}
@@ -81,6 +95,16 @@ func protoBufTransform(source, target *expr.AttributeExpr, sourceVar, targetVar 
 	}
 
 	return strings.TrimRight(code, "\n"), funcs, nil
+}
+
+// removeMeta removes the meta attributes from the given attribute. This is
+// needed to make sure that any field name overridding is removed when
+// generating protobuf types (as protogen itself won't honor these overrides).
+func removeMeta(att *expr.AttributeExpr) {
+	codegen.Walk(att, func(a *expr.AttributeExpr) error {
+		a.Meta = nil
+		return nil
+	})
 }
 
 // transformAttribute returns the code to initialize a target data structure
@@ -95,7 +119,8 @@ func transformAttribute(source, target *expr.AttributeExpr, sourceVar, targetVar
 
 	if err := codegen.IsCompatible(source.Type, target.Type, sourceVar, targetVar); err != nil {
 		if ta.proto {
-			initCode += fmt.Sprintf("%s := &%s{}\n", targetVar, ta.TargetCtx.Scope.Name(target, ta.TargetCtx.Pkg))
+			name := ta.TargetCtx.Scope.Name(target, ta.TargetCtx.Pkg, ta.TargetCtx.Pointer, ta.TargetCtx.UseDefault)
+			initCode += fmt.Sprintf("%s := &%s{}\n", targetVar, name)
 			targetVar += ".Field"
 			newVar = false
 			target = unwrapAttr(expr.DupAtt(target))
@@ -202,7 +227,7 @@ func transformObject(source, target *expr.AttributeExpr, sourceVar, targetVar st
 	if newVar {
 		assign = ":="
 	}
-	tname := ta.TargetCtx.Scope.Name(target, ta.TargetCtx.Pkg)
+	tname := ta.TargetCtx.Scope.Name(target, ta.TargetCtx.Pkg, ta.TargetCtx.Pointer, ta.TargetCtx.UseDefault)
 	buffer.WriteString(fmt.Sprintf("%s %s %s%s{%s}\n", targetVar, assign, deref, tname, initCode))
 	buffer.WriteString(postInitCode)
 
@@ -210,6 +235,8 @@ func transformObject(source, target *expr.AttributeExpr, sourceVar, targetVar st
 	// handle default values
 	var err error
 	walkMatches(source, target, func(srcMatt, tgtMatt *expr.MappedAttributeExpr, srcc, tgtc *expr.AttributeExpr, n string) {
+		srcc = unAlias(srcc)
+		tgtc = unAlias(tgtc)
 		var (
 			code string
 
@@ -219,7 +246,7 @@ func transformObject(source, target *expr.AttributeExpr, sourceVar, targetVar st
 		{
 			if err = codegen.IsCompatible(srcc.Type, tgtc.Type, "", ""); err != nil {
 				if ta.proto {
-					ta.targetInit = ta.TargetCtx.Scope.Name(tgtc, ta.TargetCtx.Pkg)
+					ta.targetInit = ta.TargetCtx.Scope.Name(tgtc, ta.TargetCtx.Pkg, ta.TargetCtx.Pointer, ta.TargetCtx.UseDefault)
 					tgtc = unwrapAttr(tgtc)
 				} else {
 					srcc = unwrapAttr(srcc)
@@ -336,7 +363,7 @@ func transformArray(source, target *expr.Array, sourceVar, targetVar string, new
 	tgt := target.ElemType
 	if err = codegen.IsCompatible(src.Type, tgt.Type, "[0]", "[0]"); err != nil {
 		if ta.proto {
-			ta.targetInit = ta.TargetCtx.Scope.Name(tgt, ta.TargetCtx.Pkg)
+			ta.targetInit = ta.TargetCtx.Scope.Name(tgt, ta.TargetCtx.Pkg, ta.TargetCtx.Pointer, ta.TargetCtx.UseDefault)
 			tgt = unwrapAttr(expr.DupAtt(tgt))
 		} else {
 			src = unwrapAttr(expr.DupAtt(src))
@@ -355,7 +382,7 @@ func transformArray(source, target *expr.Array, sourceVar, targetVar string, new
 		"TargetVar":      targetVar,
 		"NewVar":         newVar,
 		"TransformAttrs": ta,
-		"LoopVar":        string(105 + strings.Count(targetVar, "[")),
+		"LoopVar":        string(rune(105 + strings.Count(targetVar, "["))),
 	}
 	var buf bytes.Buffer
 	if err := transformGoArrayT.Execute(&buf, data); err != nil {
@@ -406,7 +433,7 @@ func transformMap(source, target *expr.Map, sourceVar, targetVar string, newVar 
 	tgt := target.ElemType
 	if err = codegen.IsCompatible(src.Type, tgt.Type, "[*]", "[*]"); err != nil {
 		if ta.proto {
-			ta.targetInit = ta.TargetCtx.Scope.Name(tgt, ta.TargetCtx.Pkg)
+			ta.targetInit = ta.TargetCtx.Scope.Name(tgt, ta.TargetCtx.Pkg, ta.TargetCtx.Pointer, ta.TargetCtx.UseDefault)
 			tgt = unwrapAttr(expr.DupAtt(tgt))
 		} else {
 			src = unwrapAttr(expr.DupAtt(src))
@@ -430,7 +457,7 @@ func transformMap(source, target *expr.Map, sourceVar, targetVar string, newVar 
 		"LoopVar":        "",
 	}
 	if depth := codegen.MapDepth(target); depth > 0 {
-		data["LoopVar"] = string(97 + depth)
+		data["LoopVar"] = string(rune(97 + depth))
 	}
 	var buf bytes.Buffer
 	if err := transformGoMapT.Execute(&buf, data); err != nil {
@@ -446,16 +473,34 @@ func transformMap(source, target *expr.Map, sourceVar, targetVar string, newVar 
 func convertType(source, target *expr.AttributeExpr, sourceVar string, ta *transformAttrs) string {
 	if _, ok := source.Type.(expr.UserType); ok {
 		// return a function name for the conversion
+		sourcePrimitive, targetPrimitive := getPrimitive(source), getPrimitive(target)
+		if sourcePrimitive != nil && targetPrimitive != nil && sourcePrimitive.Type == targetPrimitive.Type {
+			if ta.proto {
+				return fmt.Sprintf("%s(%s)", targetPrimitive.Type.Name(), sourceVar)
+			}
+			return fmt.Sprintf("%s(%s)", ta.TargetCtx.Scope.Ref(target, ta.TargetCtx.Pkg), sourceVar)
+		}
 		return fmt.Sprintf("%s(%s)", transformHelperName(source, target, ta), sourceVar)
 	}
 
+	sourceType, _ := codegen.GetMetaType(source)
+	targetType, _ := codegen.GetMetaType(target)
 	if source.Type.Kind() != expr.IntKind && source.Type.Kind() != expr.UIntKind {
+		if sourceType != "" || targetType != "" {
+			if ta.proto || targetType == "" {
+				targetType = protoBufNativeGoTypeName(target.Type)
+			}
+			return fmt.Sprintf("%s(%s)", targetType, sourceVar)
+		}
 		return sourceVar
 	}
 	if ta.proto {
-		return fmt.Sprintf("%s(%s)", protoBufNativeGoTypeName(source.Type), sourceVar)
+		return fmt.Sprintf("%s(%s)", protoBufNativeGoTypeName(target.Type), sourceVar)
 	}
-	return fmt.Sprintf("%s(%s)", codegen.GoNativeTypeName(source.Type), sourceVar)
+	if targetType == "" {
+		targetType = codegen.GoNativeTypeName(target.Type)
+	}
+	return fmt.Sprintf("%s(%s)", targetType, sourceVar)
 }
 
 // zeroValure returns the zero value for the given primitive type.
@@ -553,9 +598,7 @@ func transformAttributeHelpers(source, target *expr.AttributeExpr, ta *transform
 // collectHelpers recursively traverses the given attributes and return the
 // transform helper functions required to generate the transform code.
 func collectHelpers(source, target *expr.AttributeExpr, req bool, ta *transformAttrs, seen ...map[string]*codegen.TransformFunctionData) ([]*codegen.TransformFunctionData, error) {
-	var (
-		data []*codegen.TransformFunctionData
-	)
+	var data []*codegen.TransformFunctionData
 	switch {
 	case expr.IsArray(source.Type):
 		helpers, err := transformAttributeHelpers(
@@ -665,11 +708,19 @@ func transformHelperName(source, target *expr.AttributeExpr, ta *transformAttrs)
 		prefix string
 	)
 	{
-		sname = codegen.Goify(ta.SourceCtx.Scope.Name(source, ta.SourceCtx.Pkg), true)
-		tname = codegen.Goify(ta.TargetCtx.Scope.Name(target, ta.TargetCtx.Pkg), true)
+		sname = codegen.Goify(ta.SourceCtx.Scope.Name(source, ta.SourceCtx.Pkg, ta.TargetCtx.Pointer, ta.TargetCtx.UseDefault), true)
+		tname = codegen.Goify(ta.TargetCtx.Scope.Name(target, ta.TargetCtx.Pkg, ta.TargetCtx.Pointer, ta.TargetCtx.UseDefault), true)
 		prefix = ta.Prefix
 	}
 	return codegen.Goify(prefix+sname+"To"+tname, false)
+}
+
+// unAlias returns the base AttributeExpr of an aliased one.
+func unAlias(at *expr.AttributeExpr) *expr.AttributeExpr {
+	if prim := getPrimitive(at); prim != nil {
+		return prim
+	}
+	return at
 }
 
 const (

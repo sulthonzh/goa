@@ -138,11 +138,8 @@ func Attribute(name string, args ...interface{}) {
 
 	var attr *expr.AttributeExpr
 	{
-		for _, ref := range parent.References {
-			if att := expr.AsObject(ref).Attribute(name); att != nil {
-				attr = expr.DupAtt(att)
-				break
-			}
+		if ref := parent.Find(name); ref != nil {
+			attr = expr.DupAtt(ref)
 		}
 
 		dataType, description, fn := parseAttributeArgs(attr, args...)
@@ -159,8 +156,6 @@ func Attribute(name string, args ...interface{}) {
 				Description: description,
 			}
 		}
-		attr.References = parent.References
-		attr.Bases = parent.Bases
 		if fn != nil {
 			eval.Execute(fn, attr)
 		}
@@ -222,7 +217,7 @@ func Default(def interface{}) {
 // attribute. Example supports two syntaxes: one syntax accepts two arguments
 // where the first argument is a summary describing the example and the second a
 // value provided directly or via a DSL which may also specify a long
-// description. The other syntax accepts a single argument and is equivalent to
+// description. The second syntax accepts a single argument and is equivalent to
 // using the first syntax where the summary is the string "default". When using
 // a DSL the Value function can be used to provide the example value.
 //
@@ -282,24 +277,27 @@ func Example(args ...interface{}) {
 		}
 		arg = args[1]
 	}
-	if a, ok := eval.Current().(*expr.AttributeExpr); ok {
-		ex := &expr.ExampleExpr{Summary: summary}
-		if dsl, ok := arg.(func()); ok {
-			eval.Execute(dsl, ex)
-		} else {
-			ex.Value = arg
-		}
-		if ex.Value == nil {
-			eval.ReportError("example value is missing")
-			return
-		}
-		if a.Type != nil && !a.Type.IsCompatible(ex.Value) {
-			eval.ReportError("example value %#v is incompatible with attribute of type %s",
-				ex.Value, a.Type.Name())
-			return
-		}
-		a.UserExamples = append(a.UserExamples, ex)
+	a, ok := eval.Current().(*expr.AttributeExpr)
+	if !ok {
+		eval.IncompatibleDSL()
+		return
 	}
+	ex := &expr.ExampleExpr{Summary: summary}
+	if dsl, ok := arg.(func()); ok {
+		eval.Execute(dsl, ex)
+	} else {
+		ex.Value = arg
+	}
+	if ex.Value == nil {
+		eval.ReportError("example value is missing")
+		return
+	}
+	if a.Type != nil && !a.Type.IsCompatible(ex.Value) {
+		eval.ReportError("example value %#v is incompatible with attribute of type %s",
+			ex.Value, a.Type.Name())
+		return
+	}
+	a.UserExamples = append(a.UserExamples, ex)
 }
 
 func parseAttributeArgs(baseAttr *expr.AttributeExpr, args ...interface{}) (expr.DataType, string, func()) {

@@ -59,6 +59,8 @@ func endpointParser(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr, da
 		{Path: "flag"},
 		{Path: "fmt"},
 		{Path: "os"},
+		{Path: "strconv"},
+		{Path: "unicode/utf8"},
 		codegen.GoaImport(""),
 		codegen.GoaNamedImport("grpc", "goagrpc"),
 		{Path: "google.golang.org/grpc", Name: "grpc"},
@@ -68,7 +70,7 @@ func endpointParser(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr, da
 		if sd == nil {
 			continue
 		}
-		svcName := codegen.SnakeCase(sd.Service.VarName)
+		svcName := sd.Service.PathName
 		specs = append(specs, &codegen.ImportSpec{
 			Path: path.Join(genpkg, "grpc", svcName, "client"),
 			Name: sd.Service.PkgName + "c",
@@ -105,12 +107,15 @@ func endpointParser(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr, da
 // use flag values as arguments.
 func payloadBuilders(genpkg string, svc *expr.GRPCServiceExpr, data *cli.CommandData) *codegen.File {
 	sd := GRPCServices.Get(svc.Name())
-	svcName := codegen.SnakeCase(sd.Service.VarName)
+	svcName := sd.Service.PathName
 	fpath := filepath.Join(codegen.Gendir, "grpc", svcName, "client", "cli.go")
 	title := svc.Name() + " gRPC client CLI support package"
 	specs := []*codegen.ImportSpec{
 		{Path: "encoding/json"},
 		{Path: "fmt"},
+		{Path: "strconv"},
+		{Path: "unicode/utf8"},
+		codegen.GoaImport(""),
 		{Path: path.Join(genpkg, svcName), Name: sd.Service.PkgName},
 		{Path: path.Join(genpkg, "grpc", svcName, pbPkgName), Name: sd.PkgName},
 	}
@@ -126,16 +131,10 @@ func payloadBuilders(genpkg string, svc *expr.GRPCServiceExpr, data *cli.Command
 }
 
 func buildFlags(svc *ServiceData, e *EndpointData) ([]*cli.FlagData, *cli.BuildFunctionData) {
-	var (
-		flags         []*cli.FlagData
-		buildFunction *cli.BuildFunctionData
-	)
-	{
-		if e.Request != nil {
-			flags, buildFunction = makeFlags(e, e.Request.CLIArgs)
-		}
+	if e.Request != nil {
+		return makeFlags(e, e.Request.CLIArgs)
 	}
-	return flags, buildFunction
+	return nil, nil
 }
 
 func makeFlags(e *EndpointData, args []*InitArgData) ([]*cli.FlagData, *cli.BuildFunctionData) {
@@ -143,20 +142,22 @@ func makeFlags(e *EndpointData, args []*InitArgData) ([]*cli.FlagData, *cli.Buil
 		fdata     []*cli.FieldData
 		flags     = make([]*cli.FlagData, len(args))
 		params    = make([]string, len(args))
-		pInitArgs = make([]*cli.PayloadInitArgData, len(args))
+		pInitArgs = make([]*codegen.InitArgData, len(args))
 		check     bool
 		pinit     *cli.PayloadInitData
 	)
 	for i, arg := range args {
-		pInitArgs[i] = &cli.PayloadInitArgData{
+		pInitArgs[i] = &codegen.InitArgData{
 			Name:      arg.Name,
 			FieldName: arg.FieldName,
+			FieldType: arg.FieldType,
+			Type:      arg.Type,
 		}
 
-		f := cli.NewFlagData(e.ServiceName, e.Method.Name, arg.Name, arg.TypeName, arg.Description, arg.Required, arg.Example)
+		f := cli.NewFlagData(e.ServiceName, e.Method.Name, arg.Name, arg.TypeName, arg.Description, arg.Required, arg.Example, arg.DefaultValue)
 		flags[i] = f
 		params[i] = f.FullName
-		code, chek := cli.FieldLoadCode(f, arg.Name, arg.TypeName, arg.Validate, arg.DefaultValue)
+		code, chek := cli.FieldLoadCode(f, arg.Name, arg.TypeName, arg.Validate, arg.DefaultValue, e.PayloadType)
 		check = check || chek
 		tn := arg.TypeRef
 		if f.Type == "JSON" {
@@ -179,6 +180,7 @@ func makeFlags(e *EndpointData, args []*InitArgData) ([]*cli.FlagData, *cli.Buil
 		pinit = &cli.PayloadInitData{
 			Code:           e.Request.ServerConvert.Init.Code,
 			ReturnIsStruct: e.Request.ServerConvert.Init.ReturnIsStruct,
+			ReturnTypePkg:  e.Request.ServerConvert.Init.ReturnTypePkg,
 			Args:           pInitArgs,
 		}
 	}

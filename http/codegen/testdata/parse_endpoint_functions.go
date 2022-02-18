@@ -515,11 +515,11 @@ func ParseEndpoint(
 	streamingServiceBConfigurer *streamingservicebc.ConnConfigurer,
 ) (goa.Endpoint, interface{}, error) {
 	var (
-		streamingServiceAFlags = flag.NewFlagSet("streaming-servicea", flag.ContinueOnError)
+		streamingServiceAFlags = flag.NewFlagSet("streaming-service-a", flag.ContinueOnError)
 
 		streamingServiceAMethodFlags = flag.NewFlagSet("method", flag.ExitOnError)
 
-		streamingServiceBFlags = flag.NewFlagSet("streaming-serviceb", flag.ContinueOnError)
+		streamingServiceBFlags = flag.NewFlagSet("streaming-service-b", flag.ContinueOnError)
 
 		streamingServiceBMethodFlags = flag.NewFlagSet("method", flag.ExitOnError)
 	)
@@ -544,9 +544,9 @@ func ParseEndpoint(
 	{
 		svcn = flag.Arg(0)
 		switch svcn {
-		case "streaming-servicea":
+		case "streaming-service-a":
 			svcf = streamingServiceAFlags
-		case "streaming-serviceb":
+		case "streaming-service-b":
 			svcf = streamingServiceBFlags
 		default:
 			return nil, nil, fmt.Errorf("unknown service %q", svcn)
@@ -563,14 +563,14 @@ func ParseEndpoint(
 	{
 		epn = svcf.Arg(0)
 		switch svcn {
-		case "streaming-servicea":
+		case "streaming-service-a":
 			switch epn {
 			case "method":
 				epf = streamingServiceAMethodFlags
 
 			}
 
-		case "streaming-serviceb":
+		case "streaming-service-b":
 			switch epn {
 			case "method":
 				epf = streamingServiceBMethodFlags
@@ -597,14 +597,14 @@ func ParseEndpoint(
 	)
 	{
 		switch svcn {
-		case "streaming-servicea":
+		case "streaming-service-a":
 			c := streamingserviceac.NewClient(scheme, host, doer, enc, dec, restore, dialer, streamingServiceAConfigurer)
 			switch epn {
 			case "method":
 				endpoint = c.Method()
 				data = nil
 			}
-		case "streaming-serviceb":
+		case "streaming-service-b":
 			c := streamingservicebc.NewClient(scheme, host, doer, enc, dec, restore, dialer, streamingServiceBConfigurer)
 			switch epn {
 			case "method":
@@ -629,12 +629,13 @@ func BuildMethodMultiSimplePayloadPayload(serviceMultiSimple1MethodMultiSimplePa
 	{
 		err = json.Unmarshal([]byte(serviceMultiSimple1MethodMultiSimplePayloadBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, example of valid JSON:\n%s", "'{\n      \"a\": false\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"a\": false\n   }'")
 		}
 	}
 	v := &servicemultisimple1.MethodMultiSimplePayloadPayload{
 		A: body.A,
 	}
+
 	return v, nil
 }
 `
@@ -647,7 +648,7 @@ func BuildMethodMultiPayloadPayload(serviceMultiMethodMultiPayloadBody string, s
 	{
 		err = json.Unmarshal([]byte(serviceMultiMethodMultiPayloadBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, example of valid JSON:\n%s", "'{\n      \"c\": {\n         \"att\": false,\n         \"att10\": \"Aspernatur quo error explicabo pariatur.\",\n         \"att11\": \"Q3VtcXVlIHZvbHVwdGF0ZW0u\",\n         \"att12\": \"Distinctio aliquam nihil blanditiis ut.\",\n         \"att13\": [\n            \"Nihil excepturi deserunt quasi omnis sed.\",\n            \"Sit maiores aperiam autem non ea rem.\"\n         ],\n         \"att14\": {\n            \"Excepturi totam.\": \"Ut aut facilis vel ipsam.\",\n            \"Minima et aut non sunt consequuntur.\": \"Et consequuntur porro quasi.\",\n            \"Quis voluptates quaerat et temporibus facere.\": \"Ipsam eaque sunt maxime suscipit.\"\n         },\n         \"att15\": {\n            \"inline\": \"Ea alias repellat nobis veritatis.\"\n         },\n         \"att2\": 3504438334001971349,\n         \"att3\": 2005839040,\n         \"att4\": 5845720715558772393,\n         \"att5\": 2900634008447043830,\n         \"att6\": 1865618013,\n         \"att7\": 1484745265794365762,\n         \"att8\": 0.11815318,\n         \"att9\": 0.30907290919538355\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"c\": {\n         \"att\": false,\n         \"att10\": \"Aspernatur quo error explicabo pariatur.\",\n         \"att11\": \"Q3VtcXVlIHZvbHVwdGF0ZW0u\",\n         \"att12\": \"Distinctio aliquam nihil blanditiis ut.\",\n         \"att13\": [\n            \"Nihil excepturi deserunt quasi omnis sed.\",\n            \"Sit maiores aperiam autem non ea rem.\"\n         ],\n         \"att14\": {\n            \"Excepturi totam.\": \"Ut aut facilis vel ipsam.\",\n            \"Minima et aut non sunt consequuntur.\": \"Et consequuntur porro quasi.\",\n            \"Quis voluptates quaerat et temporibus facere.\": \"Ipsam eaque sunt maxime suscipit.\"\n         },\n         \"att15\": {\n            \"inline\": \"Ea alias repellat nobis veritatis.\"\n         },\n         \"att2\": 3504438334001971349,\n         \"att3\": 2005839040,\n         \"att4\": 5845720715558772393,\n         \"att5\": 12124006045301819638,\n         \"att6\": 3731236027,\n         \"att7\": 10708117302649141570,\n         \"att8\": 0.11815318,\n         \"att9\": 0.30907290919538355\n      }\n   }'")
 		}
 	}
 	var b *string
@@ -673,6 +674,7 @@ func BuildMethodMultiPayloadPayload(serviceMultiMethodMultiPayloadBody string, s
 	}
 	v.B = b
 	v.A = a
+
 	return v, nil
 }
 `
@@ -692,27 +694,27 @@ func BuildMethodQueryBoolPayload(serviceQueryBoolMethodQueryBoolQ string) (*serv
 			}
 		}
 	}
-	payload := &servicequerybool.MethodQueryBoolPayload{
-		Q: q,
-	}
-	return payload, nil
+	v := &servicequerybool.MethodQueryBoolPayload{}
+	v.Q = q
+
+	return v, nil
 }
 `
 
 var BodyQueryPathObjectBuildCode = `// BuildMethodBodyQueryPathObjectPayload builds the payload for the
 // ServiceBodyQueryPathObject MethodBodyQueryPathObject endpoint from CLI flags.
-func BuildMethodBodyQueryPathObjectPayload(serviceBodyQueryPathObjectMethodBodyQueryPathObjectBody string, serviceBodyQueryPathObjectMethodBodyQueryPathObjectC string, serviceBodyQueryPathObjectMethodBodyQueryPathObjectB string) (*servicebodyquerypathobject.MethodBodyQueryPathObjectPayload, error) {
+func BuildMethodBodyQueryPathObjectPayload(serviceBodyQueryPathObjectMethodBodyQueryPathObjectBody string, serviceBodyQueryPathObjectMethodBodyQueryPathObjectC2 string, serviceBodyQueryPathObjectMethodBodyQueryPathObjectB string) (*servicebodyquerypathobject.MethodBodyQueryPathObjectPayload, error) {
 	var err error
 	var body MethodBodyQueryPathObjectRequestBody
 	{
 		err = json.Unmarshal([]byte(serviceBodyQueryPathObjectMethodBodyQueryPathObjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, example of valid JSON:\n%s", "'{\n      \"a\": \"Ullam aut.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"a\": \"Ullam aut.\"\n   }'")
 		}
 	}
-	var c string
+	var c2 string
 	{
-		c = serviceBodyQueryPathObjectMethodBodyQueryPathObjectC
+		c2 = serviceBodyQueryPathObjectMethodBodyQueryPathObjectC2
 	}
 	var b *string
 	{
@@ -723,8 +725,40 @@ func BuildMethodBodyQueryPathObjectPayload(serviceBodyQueryPathObjectMethodBodyQ
 	v := &servicebodyquerypathobject.MethodBodyQueryPathObjectPayload{
 		A: body.A,
 	}
-	v.C = &c
+	v.C = &c2
 	v.B = b
+
+	return v, nil
+}
+`
+
+var ParamValidateBuildCode = `// BuildMethodParamValidatePayload builds the payload for the
+// ServiceParamValidate MethodParamValidate endpoint from CLI flags.
+func BuildMethodParamValidatePayload(serviceParamValidateMethodParamValidateA string) (*serviceparamvalidate.MethodParamValidatePayload, error) {
+	var err error
+	var a *int
+	{
+		if serviceParamValidateMethodParamValidateA != "" {
+			var v int64
+			v, err = strconv.ParseInt(serviceParamValidateMethodParamValidateA, 10, 64)
+			val := int(v)
+			a = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for a, must be INT")
+			}
+			if a != nil {
+				if *a < 1 {
+					err = goa.MergeErrors(err, goa.InvalidRangeError("a", *a, 1, true))
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	v := &serviceparamvalidate.MethodParamValidatePayload{}
+	v.A = a
+
 	return v, nil
 }
 `
@@ -914,7 +948,7 @@ func ParseEndpoint(
 				err = json.Unmarshal([]byte(*serviceBodyPrimitiveArrayStringValidateMethodBodyPrimitiveArrayStringValidatePFlag), &val)
 				data = val
 				if err != nil {
-					return nil, nil, fmt.Errorf("invalid JSON for serviceBodyPrimitiveArrayStringValidateMethodBodyPrimitiveArrayStringValidatePFlag, example of valid JSON:\n%s", "'[\n      \"val\",\n      \"val\",\n      \"val\"\n   ]'")
+					return nil, nil, fmt.Errorf("invalid JSON for serviceBodyPrimitiveArrayStringValidateMethodBodyPrimitiveArrayStringValidatePFlag, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"val\",\n      \"val\",\n      \"val\"\n   ]'")
 				}
 			}
 		}
@@ -935,15 +969,12 @@ func BuildMethodBodyInlineArrayUserPayload(serviceBodyInlineArrayUserMethodBodyI
 	{
 		err = json.Unmarshal([]byte(serviceBodyInlineArrayUserMethodBodyInlineArrayUserBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, example of valid JSON:\n%s", "'[\n      {\n         \"a\": \"patterna\",\n         \"b\": \"patternb\"\n      },\n      {\n         \"a\": \"patterna\",\n         \"b\": \"patternb\"\n      }\n   ]'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      {\n         \"a\": \"patterna\",\n         \"b\": \"patternb\"\n      },\n      {\n         \"a\": \"patterna\",\n         \"b\": \"patternb\"\n      }\n   ]'")
 		}
 	}
 	v := make([]*servicebodyinlinearrayuser.ElemType, len(body))
 	for i, val := range body {
-		v[i] = &servicebodyinlinearrayuser.ElemType{
-			A: val.A,
-			B: val.B,
-		}
+		v[i] = marshalElemTypeRequestBodyToServicebodyinlinearrayuserElemType(val)
 	}
 	return v, nil
 }
@@ -957,21 +988,62 @@ func BuildMethodBodyInlineMapUserPayload(serviceBodyInlineMapUserMethodBodyInlin
 	{
 		err = json.Unmarshal([]byte(serviceBodyInlineMapUserMethodBodyInlineMapUserBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, example of valid JSON:\n%s", "null")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "null")
 		}
 	}
 	v := make(map[*servicebodyinlinemapuser.KeyType]*servicebodyinlinemapuser.ElemType, len(body))
 	for key, val := range body {
-		tk := &servicebodyinlinemapuser.KeyType{
-			A: key.A,
-			B: key.B,
-		}
-		tv := &servicebodyinlinemapuser.ElemType{
-			A: val.A,
-			B: val.B,
-		}
-		v[tk] = tv
+		tk := marshalKeyTypeRequestBodyToServicebodyinlinemapuserKeyType(val)
+		v[tk] = marshalElemTypeRequestBodyToServicebodyinlinemapuserElemType(val)
 	}
+	return v, nil
+}
+`
+
+var PayloadObjectBuildCode = `// BuildMethodBodyInlineObjectPayload builds the payload for the
+// ServiceBodyInlineObject MethodBodyInlineObject endpoint from CLI flags.
+func BuildMethodBodyInlineObjectPayload(serviceBodyInlineObjectMethodBodyInlineObjectBody string) (*servicebodyinlineobject.MethodBodyInlineObjectPayload, error) {
+	var err error
+	var body struct {
+		A *string ` + "`" + `form:"a" json:"a" xml:"a"` + "`" + `
+	}
+	{
+		err = json.Unmarshal([]byte(serviceBodyInlineObjectMethodBodyInlineObjectBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"a\": \"Ullam aut.\"\n   }'")
+		}
+	}
+	v := &servicebodyinlineobject.MethodBodyInlineObjectPayload{
+		A: body.A,
+	}
+
+	return v, nil
+}
+`
+
+var PayloadObjectDefaultBuildCode = `// BuildMethodBodyInlineObjectPayload builds the payload for the
+// ServiceBodyInlineObject MethodBodyInlineObject endpoint from CLI flags.
+func BuildMethodBodyInlineObjectPayload(serviceBodyInlineObjectMethodBodyInlineObjectBody string) (*servicebodyinlineobject.MethodBodyInlineObjectPayload, error) {
+	var err error
+	var body struct {
+		A string ` + "`" + `form:"a" json:"a" xml:"a"` + "`" + `
+	}
+	{
+		err = json.Unmarshal([]byte(serviceBodyInlineObjectMethodBodyInlineObjectBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"a\": \"Ullam aut.\"\n   }'")
+		}
+	}
+	v := &servicebodyinlineobject.MethodBodyInlineObjectPayload{
+		A: body.A,
+	}
+	{
+		var zero string
+		if v.A == zero {
+			v.A = "foo"
+		}
+	}
+
 	return v, nil
 }
 `
@@ -1063,7 +1135,7 @@ func ParseEndpoint(
 				err = json.Unmarshal([]byte(*serviceMapQueryPrimitiveArrayMapQueryPrimitiveArrayPFlag), &val)
 				data = val
 				if err != nil {
-					return nil, nil, fmt.Errorf("invalid JSON for serviceMapQueryPrimitiveArrayMapQueryPrimitiveArrayPFlag, example of valid JSON:\n%s", "'{\n      \"Iste perspiciatis.\": [\n         567408540461384614,\n         5721637919286150856\n      ],\n      \"Itaque inventore optio.\": [\n         944964629895926327,\n         593430823343775997\n      ],\n      \"Molestias recusandae doloribus qui quia.\": [\n         6921210467234244263,\n         3742304935485895874,\n         4170793618430505438,\n         7388093990298529880\n      ]\n   }'")
+					return nil, nil, fmt.Errorf("invalid JSON for serviceMapQueryPrimitiveArrayMapQueryPrimitiveArrayPFlag, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"Iste perspiciatis.\": [\n         567408540461384614,\n         5721637919286150856\n      ],\n      \"Itaque inventore optio.\": [\n         944964629895926327,\n         9816802860198551805\n      ],\n      \"Molestias recusandae doloribus qui quia.\": [\n         16144582504089020071,\n         3742304935485895874,\n         13394165655285281246,\n         7388093990298529880\n      ]\n   }'")
 				}
 			}
 		}
@@ -1084,7 +1156,7 @@ func BuildMethodMapQueryObjectPayload(serviceMapQueryObjectMethodMapQueryObjectB
 	{
 		err = json.Unmarshal([]byte(serviceMapQueryObjectMethodMapQueryObjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, example of valid JSON:\n%s", "'{\n      \"b\": \"patternb\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"b\": \"patternb\"\n   }'")
 		}
 		if body.B != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.b", *body.B, "patternb"))
@@ -1096,12 +1168,16 @@ func BuildMethodMapQueryObjectPayload(serviceMapQueryObjectMethodMapQueryObjectB
 	var a string
 	{
 		a = serviceMapQueryObjectMethodMapQueryObjectA
+		err = goa.MergeErrors(err, goa.ValidatePattern("a", a, "patterna"))
+		if err != nil {
+			return nil, err
+		}
 	}
 	var c map[int][]string
 	{
 		err = json.Unmarshal([]byte(serviceMapQueryObjectMethodMapQueryObjectC), &c)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for c, example of valid JSON:\n%s", "'{\n      \"1484745265794365762\": [\n         \"Similique aspernatur.\",\n         \"Error explicabo.\",\n         \"Minima cumque voluptatem et distinctio aliquam.\",\n         \"Blanditiis ut eaque.\"\n      ],\n      \"4925854623691091547\": [\n         \"Eos aut ipsam.\",\n         \"Aliquam tempora.\"\n      ],\n      \"7174751143827362498\": [\n         \"Facilis minus explicabo nemo eos vel repellat.\",\n         \"Voluptatum magni aperiam qui.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for c, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"1484745265794365762\": [\n         \"Similique aspernatur.\",\n         \"Error explicabo.\",\n         \"Minima cumque voluptatem et distinctio aliquam.\",\n         \"Blanditiis ut eaque.\"\n      ],\n      \"4925854623691091547\": [\n         \"Eos aut ipsam.\",\n         \"Aliquam tempora.\"\n      ],\n      \"7174751143827362498\": [\n         \"Facilis minus explicabo nemo eos vel repellat.\",\n         \"Voluptatum magni aperiam qui.\"\n      ]\n   }'")
 		}
 	}
 	v := &servicemapqueryobject.PayloadType{
@@ -1109,6 +1185,7 @@ func BuildMethodMapQueryObjectPayload(serviceMapQueryObjectMethodMapQueryObjectB
 	}
 	v.A = a
 	v.C = c
+
 	return v, nil
 }
 `
@@ -1129,10 +1206,10 @@ func BuildMethodQueryUInt32Payload(serviceQueryUInt32MethodQueryUInt32Q string) 
 			}
 		}
 	}
-	payload := &servicequeryuint32.MethodQueryUInt32Payload{
-		Q: q,
-	}
-	return payload, nil
+	v := &servicequeryuint32.MethodQueryUInt32Payload{}
+	v.Q = q
+
+	return v, nil
 }
 `
 
@@ -1152,10 +1229,10 @@ func BuildMethodQueryUIntPayload(serviceQueryUIntMethodQueryUIntQ string) (*serv
 			}
 		}
 	}
-	payload := &servicequeryuint.MethodQueryUIntPayload{
-		Q: q,
-	}
-	return payload, nil
+	v := &servicequeryuint.MethodQueryUIntPayload{}
+	v.Q = q
+
+	return v, nil
 }
 `
 
@@ -1168,24 +1245,31 @@ func BuildMethodQueryStringPayload(serviceQueryStringMethodQueryStringQ string) 
 			q = &serviceQueryStringMethodQueryStringQ
 		}
 	}
-	payload := &servicequerystring.MethodQueryStringPayload{
-		Q: q,
-	}
-	return payload, nil
+	v := &servicequerystring.MethodQueryStringPayload{}
+	v.Q = q
+
+	return v, nil
 }
 `
 
 var QueryStringRequiredBuildCode = `// BuildMethodQueryStringValidatePayload builds the payload for the
 // ServiceQueryStringValidate MethodQueryStringValidate endpoint from CLI flags.
 func BuildMethodQueryStringValidatePayload(serviceQueryStringValidateMethodQueryStringValidateQ string) (*servicequerystringvalidate.MethodQueryStringValidatePayload, error) {
+	var err error
 	var q string
 	{
 		q = serviceQueryStringValidateMethodQueryStringValidateQ
+		if !(q == "val") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("q", q, []interface{}{"val"}))
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
-	payload := &servicequerystringvalidate.MethodQueryStringValidatePayload{
-		Q: q,
-	}
-	return payload, nil
+	v := &servicequerystringvalidate.MethodQueryStringValidatePayload{}
+	v.Q = q
+
+	return v, nil
 }
 `
 
@@ -1198,10 +1282,10 @@ func BuildMethodQueryStringDefaultPayload(serviceQueryStringDefaultMethodQuerySt
 			q = serviceQueryStringDefaultMethodQueryStringDefaultQ
 		}
 	}
-	payload := &servicequerystringdefault.MethodQueryStringDefaultPayload{
-		Q: q,
-	}
-	return payload, nil
+	v := &servicequerystringdefault.MethodQueryStringDefaultPayload{}
+	v.Q = q
+
+	return v, nil
 }
 `
 
@@ -1215,14 +1299,14 @@ func BuildMethodBodyPrimitiveArrayUserPayload(serviceBodyPrimitiveArrayUserMetho
 		if serviceBodyPrimitiveArrayUserMethodBodyPrimitiveArrayUserA != "" {
 			err = json.Unmarshal([]byte(serviceBodyPrimitiveArrayUserMethodBodyPrimitiveArrayUserA), &a)
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for a, example of valid JSON:\n%s", "'[\n      \"Perspiciatis repellendus harum et est.\",\n      \"Nisi quibusdam nisi sint sunt beatae.\"\n   ]'")
+				return nil, fmt.Errorf("invalid JSON for a, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Perspiciatis repellendus harum et est.\",\n      \"Nisi quibusdam nisi sint sunt beatae.\"\n   ]'")
 			}
 		}
 	}
-	payload := &servicebodyprimitivearrayuser.PayloadType{
-		A: a,
-	}
-	return payload, nil
+	v := &servicebodyprimitivearrayuser.PayloadType{}
+	v.A = a
+
+	return v, nil
 }
 `
 
@@ -1234,7 +1318,7 @@ func BuildMethodAPayload(serviceWithParamsAndHeadersBlockMethodABody string, ser
 	{
 		err = json.Unmarshal([]byte(serviceWithParamsAndHeadersBlockMethodABody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, example of valid JSON:\n%s", "'{\n      \"body\": \"Inventore optio quia ullam aut iste iste.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"body\": \"Inventore optio quia ullam aut iste iste.\"\n   }'")
 		}
 	}
 	var path uint
@@ -1288,6 +1372,7 @@ func BuildMethodAPayload(serviceWithParamsAndHeadersBlockMethodABody string, ser
 	v.OptionalButRequiredParam = &optionalButRequiredParam
 	v.Required = required
 	v.OptionalButRequiredHeader = &optionalButRequiredHeader
+
 	return v, nil
 }
 `

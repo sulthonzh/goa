@@ -36,11 +36,13 @@ func exampleSvrMain(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *c
 		{Path: "flag"},
 		{Path: "fmt"},
 		{Path: "log"},
+		{Path: "net"},
 		{Path: "net/url"},
 		{Path: "os"},
 		{Path: "os/signal"},
 		{Path: "strings"},
 		{Path: "sync"},
+		{Path: "syscall"},
 		{Path: "time"},
 		codegen.GoaImport("middleware"),
 	}
@@ -52,7 +54,7 @@ func exampleSvrMain(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *c
 		sd := service.Services.Get(svc)
 		svcData[i] = sd
 		specs = append(specs, &codegen.ImportSpec{
-			Path: path.Join(genpkg, codegen.SnakeCase(sd.VarName)),
+			Path: path.Join(genpkg, sd.PathName),
 			Name: scope.Unique(sd.PkgName),
 		})
 	}
@@ -74,7 +76,7 @@ func exampleSvrMain(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *c
 
 	sections := []*codegen.SectionTemplate{
 		codegen.Header("", "main", specs),
-		&codegen.SectionTemplate{
+		{
 			Name:   "server-main-start",
 			Source: mainStartT,
 			Data: map[string]interface{}{
@@ -83,15 +85,13 @@ func exampleSvrMain(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *c
 			FuncMap: map[string]interface{}{
 				"join": strings.Join,
 			},
-		},
-		&codegen.SectionTemplate{
+		}, {
 			Name:   "server-main-logger",
 			Source: mainLoggerT,
 			Data: map[string]interface{}{
 				"APIPkg": apiPkg,
 			},
-		},
-		&codegen.SectionTemplate{
+		}, {
 			Name:   "server-main-services",
 			Source: mainSvcsT,
 			Data: map[string]interface{}{
@@ -101,8 +101,7 @@ func exampleSvrMain(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *c
 			FuncMap: map[string]interface{}{
 				"mustInitServices": mustInitServices,
 			},
-		},
-		&codegen.SectionTemplate{
+		}, {
 			Name:   "server-main-endpoints",
 			Source: mainEndpointsT,
 			Data: map[string]interface{}{
@@ -111,9 +110,10 @@ func exampleSvrMain(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *c
 			FuncMap: map[string]interface{}{
 				"mustInitServices": mustInitServices,
 			},
-		},
-		&codegen.SectionTemplate{Name: "server-main-interrupts", Source: mainInterruptsT},
-		&codegen.SectionTemplate{
+		}, {
+			Name:   "server-main-interrupts",
+			Source: mainInterruptsT,
+		}, {
 			Name:   "server-main-handler",
 			Source: mainServerHndlrT,
 			Data: map[string]interface{}{
@@ -126,7 +126,10 @@ func exampleSvrMain(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *c
 				"toUpper": strings.ToUpper,
 			},
 		},
-		&codegen.SectionTemplate{Name: "server-main-end", Source: mainEndT},
+		{
+			Name:   "server-main-end",
+			Source: mainEndT,
+		},
 	}
 
 	return &codegen.File{Path: mainPath, SectionTemplates: sections, SkipExist: true}
@@ -225,7 +228,7 @@ func main() {
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -255,7 +258,7 @@ func main() {
 						}
 					}
 					if !{{ .VarName }}Seen {
-						fmt.Fprintf(os.Stderr, "invalid value for URL '{{ .Name }}' variable: %q (valid values: {{ join .Values "," }})", *{{ .VarName }}F)
+						fmt.Fprintf(os.Stderr, "invalid value for URL '{{ .Name }}' variable: %q (valid values: {{ join .Values "," }})\n", *{{ .VarName }}F)
 						os.Exit(1)
 					}
 				{{- end }}
@@ -263,7 +266,7 @@ func main() {
 			{{- end }}
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -273,18 +276,22 @@ func main() {
 				u.Host = *domainF
 			}
 			if *{{ $u.Transport.Type }}PortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *{{ $u.Transport.Type }}PortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *{{ $u.Transport.Type }}PortF)
 			} else if u.Port() == "" {
-				u.Host += ":{{ $u.Port }}"
+				u.Host = net.JoinHostPort(u.Host, "{{ $u.Port }}")
 			}
-			handle{{ toUpper $u.Transport.Name }}Server(ctx, u, {{ range $.Services }}{{ if .Methods }}{{ .VarName }}Endpoints, {{ end }}{{ end }}&wg, errc, logger, *dbgF)
+			handle{{ toUpper $u.Transport.Name }}Server(ctx, u, {{ range $t := $.Server.Transports }}{{ if eq $t.Type $u.Transport.Type }}{{ range $s := $t.Services }}{{ range $.Services }}{{ if eq $s .Name }}{{ if .Methods }}{{ .VarName }}Endpoints, {{ end }}{{ end }}{{ end }}{{ end }}{{ end }}{{ end }}&wg, errc, logger, *dbgF)
 		}
 	{{- end }}
 	{{ end }}
 {{- end }}
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: {{ join .Server.AvailableHosts "|" }})", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: {{ join .Server.AvailableHosts "|" }})\n", *hostF)
 	}
 `
 

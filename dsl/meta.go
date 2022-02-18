@@ -27,7 +27,7 @@ import (
 //
 //    var Unused = Type("Unused", func() {
 //        Attribute("name", String)
-//        Meta("type:generate:force", service1, service2)
+//        Meta("type:generate:force", "service1", "service2")
 //    })
 //
 // - "struct:error:name" identifies the attribute of a result type used to
@@ -126,6 +126,7 @@ import (
 //            Meta("swagger:tag:Backend:desc", "Description of Backend")
 //            Meta("swagger:tag:Backend:url", "http://example.com")
 //            Meta("swagger:tag:Backend:url:desc", "See more docs here")
+//            Meta("swagger:tag:Backend:extension:x-data", `{"foo":"bar"}`)
 //        })
 //    })
 //
@@ -150,8 +151,6 @@ func Meta(name string, value ...string) {
 	}
 
 	switch e := eval.Current().(type) {
-	case *expr.RootExpr:
-		e.Meta = appendMeta(e.Meta, name, value...)
 	case *expr.APIExpr:
 		e.Meta = appendMeta(e.Meta, name, value...)
 	case *expr.AttributeExpr:

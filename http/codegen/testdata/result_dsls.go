@@ -585,12 +585,48 @@ var ResultBodyObjectHeaderDSL = func() {
 	})
 }
 
+var ResultBodyUserRequiredDSL = func() {
+	var Bod = Type("body", func() {
+		Attribute("a")
+		Required("a")
+	})
+	Service("ServiceBodyUserRequired", func() {
+		Method("MethodBodyUserRequired", func() {
+			Result(func() {
+				Attribute("body", Bod)
+			})
+			HTTP(func() {
+				GET("/")
+				Response(StatusOK, func() {
+					Body("body")
+				})
+			})
+		})
+	})
+}
+
 var ResultBodyUserDSL = func() {
 	var ResultType = Type("ResultType", func() {
 		Attribute("a", String)
 	})
 	Service("ServiceBodyUser", func() {
 		Method("MethodBodyUser", func() {
+			Result(ResultType)
+			HTTP(func() {
+				POST("/")
+			})
+		})
+	})
+}
+
+var ResultTypeValidateDSL = func() {
+	var ResultType = Type("ResultType", func() {
+		Attribute("a", String, func() {
+			MinLength(5)
+		})
+	})
+	Service("ServiceResultTypeValidate", func() {
+		Method("MethodResultTypeValidate", func() {
 			Result(ResultType)
 			HTTP(func() {
 				POST("/")
@@ -673,6 +709,103 @@ var ResultBodyCollectionExplicitViewDSL = func() {
 		Method("MethodBodyCollectionExplicitView", func() {
 			Result(CollectionOf(RT), func() {
 				View("tiny")
+			})
+			HTTP(func() {
+				POST("/")
+				Response(StatusOK)
+			})
+		})
+	})
+}
+
+var ResultWithResultCollectionDSL = func() {
+	var RT = ResultType("RT", func() {
+		Attributes(func() {
+			Attribute("x", String, func() {
+				MinLength(5)
+			})
+		})
+	})
+	var ResultType = ResultType("ResultType", func() {
+		Attributes(func() {
+			Attribute("x", CollectionOf(RT))
+		})
+	})
+	Service("ServiceResultWithResultCollection", func() {
+		Method("MethodResultWithResultCollection", func() {
+			Result(func() {
+				Attribute("a", ResultType)
+			})
+			HTTP(func() {
+				POST("/")
+				Response(StatusOK)
+			})
+		})
+	})
+}
+
+var EmptyErrorResponseBodyDSL = func() {
+	Service("ServiceEmptyErrorResponseBody", func() {
+		Method("MethodEmptyErrorResponseBody", func() {
+			Error("internal_error")
+			Error("not_found", String)
+			HTTP(func() {
+				HEAD("/")
+				Response(StatusOK)
+				Response("internal_error", StatusInternalServerError, func() {
+					Body(Empty)
+					Header("name:Error-Name")
+				})
+				Response("not_found", StatusNotFound, func() {
+					Body(Empty)
+					Header("in-header")
+				})
+			})
+		})
+	})
+}
+
+var EmptyCustomErrorResponseBodyDSL = func() {
+	var ErrorType = Type("Error", func() {
+		Attribute("err", String)
+	})
+	Service("ServiceEmptyCustomErrorResponseBody", func() {
+		Method("MethodEmptyCustomErrorResponseBody", func() {
+			Error("internal_error", ErrorType)
+			HTTP(func() {
+				HEAD("/")
+				Response(StatusOK)
+				Response("internal_error", StatusInternalServerError, func() {
+					Body(Empty)
+				})
+			})
+		})
+	})
+}
+
+var ResultWithResultViewDSL = func() {
+	var RT = ResultType("RT", func() {
+		Attributes(func() {
+			Attribute("x")
+		})
+	})
+	var ResultType = ResultType("ResultType", func() {
+		Attributes(func() {
+			Attribute("name")
+			Attribute("rt", RT)
+		})
+		View("full", func() {
+			Attribute("name")
+			Attribute("rt")
+		})
+		View("default", func() {
+			Attribute("name")
+		})
+	})
+	Service("ServiceResultWithResultView", func() {
+		Method("MethodResultWithResultView", func() {
+			Result(ResultType, func() {
+				View("full")
 			})
 			HTTP(func() {
 				POST("/")
@@ -767,6 +900,68 @@ var ExplicitBodyUserResultMultipleViewsDSL = func() {
 				Response(StatusOK, func() {
 					Header("c:Location")
 					Body("a")
+				})
+			})
+		})
+	})
+}
+
+var ExplicitBodyUserResultObjectDSL = func() {
+	var UserType = Type("UserType", func() {
+		Attribute("x", String)
+		Attribute("y", Int)
+	})
+	var ResultType = ResultType("ResultType", func() {
+		Attribute("a", UserType)
+		Attribute("b", String)
+		Attribute("c", String)
+	})
+	Service("ServiceExplicitBodyUserResultObject", func() {
+		Method("MethodExplicitBodyUserResultObject", func() {
+			Result(ResultType)
+			HTTP(func() {
+				POST("/")
+				Response(StatusOK, func() {
+					Header("c:Location")
+					Header("b:Content-Type")
+					Body(func() {
+						Attribute("a")
+					})
+				})
+			})
+		})
+	})
+}
+
+var ExplicitBodyUserResultObjectMultipleViewDSL = func() {
+	var UserType = Type("UserType", func() {
+		Attribute("x", String)
+		Attribute("y", Int)
+	})
+	var ResultType = ResultType("ResultTypeMultipleViews", func() {
+		Attribute("a", UserType)
+		Attribute("b", String)
+		Attribute("c", String)
+		View("default", func() {
+			Attribute("a")
+			Attribute("b")
+			Attribute("c")
+		})
+		View("tiny", func() {
+			Attribute("a")
+			Attribute("c")
+		})
+	})
+	Service("ServiceExplicitBodyUserResultObjectMultipleView", func() {
+		Method("MethodExplicitBodyUserResultObjectMultipleView", func() {
+			Result(ResultType)
+			HTTP(func() {
+				POST("/")
+				Response(StatusOK, func() {
+					Header("c:Location")
+					Body(func() {
+						Attribute("a")
+					})
 				})
 			})
 		})
@@ -887,6 +1082,17 @@ var ResultBodyPrimitiveBoolDSL = func() {
 	})
 }
 
+var ResultBodyPrimitiveAnyDSL = func() {
+	Service("ServiceBodyPrimitiveAny", func() {
+		Method("MethodBodyPrimitiveAny", func() {
+			Result(Any)
+			HTTP(func() {
+				POST("/")
+			})
+		})
+	})
+}
+
 var ResultBodyPrimitiveArrayStringDSL = func() {
 	Service("ServiceBodyPrimitiveArrayString", func() {
 		Method("MethodBodyPrimitiveArrayString", func() {
@@ -928,6 +1134,22 @@ var ResultBodyPrimitiveArrayUserDSL = func() {
 	Service("ServiceBodyPrimitiveArrayUser", func() {
 		Method("MethodBodyPrimitiveArrayUser", func() {
 			Result(ArrayOf(ResultType))
+			HTTP(func() {
+				POST("/")
+			})
+		})
+	})
+}
+
+var ResultBodyInlineObjectDSL = func() {
+	var ResultType = Type("ResultType", func() {
+		Attribute("parent", func() {
+			Attribute("child")
+		})
+	})
+	Service("ServiceBodyInlineObject", func() {
+		Method("MethodBodyInlineObject", func() {
+			Result(ResultType)
 			HTTP(func() {
 				POST("/")
 			})
@@ -1067,6 +1289,20 @@ var EmptyServerResponseWithTagsDSL = func() {
 				Response(StatusNotModified, func() {
 					Tag("h", "true")
 					Body(Empty)
+				})
+			})
+		})
+	})
+}
+
+var ResultHeaderStringImplicitDSL = func() {
+	Service("ServiceHeaderStringImplicit", func() {
+		Method("MethodHeaderStringImplicit", func() {
+			Result(String)
+			HTTP(func() {
+				GET("/")
+				Response(StatusOK, func() {
+					Header("h")
 				})
 			})
 		})

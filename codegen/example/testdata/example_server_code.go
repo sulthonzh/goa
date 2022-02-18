@@ -47,7 +47,7 @@ const (
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -61,7 +61,7 @@ const (
 			addr := "http://localhost:80"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -71,10 +71,14 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":80"
+				u.Host = net.JoinHostPort(u.Host, "80")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
@@ -83,7 +87,7 @@ const (
 			addr := "grpc://localhost:8080"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -93,16 +97,20 @@ const (
 				u.Host = *domainF
 			}
 			if *grpcPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *grpcPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *grpcPortF)
 			} else if u.Port() == "" {
-				u.Host += ":8080"
+				u.Host = net.JoinHostPort(u.Host, "8080")
 			}
 			handleGRPCServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: localhost)", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: localhost)\n", *hostF)
 	}
 
 	// Wait for signal.
@@ -162,7 +170,7 @@ const (
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -176,7 +184,7 @@ const (
 			addr := "http://localhost:80"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -186,10 +194,14 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":80"
+				u.Host = net.JoinHostPort(u.Host, "80")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
@@ -198,7 +210,7 @@ const (
 			addr := "grpc://localhost:8080"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -208,16 +220,20 @@ const (
 				u.Host = *domainF
 			}
 			if *grpcPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *grpcPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *grpcPortF)
 			} else if u.Port() == "" {
-				u.Host += ":8080"
+				u.Host = net.JoinHostPort(u.Host, "8080")
 			}
 			handleGRPCServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: localhost)", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: localhost)\n", *hostF)
 	}
 
 	// Wait for signal.
@@ -277,7 +293,7 @@ const (
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -291,7 +307,7 @@ const (
 			addr := "http://example:8090"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -301,10 +317,14 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":80"
+				u.Host = net.JoinHostPort(u.Host, "80")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
@@ -313,7 +333,7 @@ const (
 			addr := "https://example:80"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -323,10 +343,14 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":443"
+				u.Host = net.JoinHostPort(u.Host, "443")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
@@ -335,7 +359,7 @@ const (
 			addr := "grpc://example:8080"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -345,16 +369,46 @@ const (
 				u.Host = *domainF
 			}
 			if *grpcPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *grpcPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *grpcPortF)
 			} else if u.Port() == "" {
-				u.Host += ":8080"
+				u.Host = net.JoinHostPort(u.Host, "8080")
 			}
 			handleGRPCServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
 
+		{
+			addr := "http://[::1]:8080"
+			u, err := url.Parse(addr)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
+				os.Exit(1)
+			}
+			if *secureF {
+				u.Scheme = "https"
+			}
+			if *domainF != "" {
+				u.Host = *domainF
+			}
+			if *httpPortF != "" {
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
+			} else if u.Port() == "" {
+				u.Host = net.JoinHostPort(u.Host, "80")
+			}
+			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
+		}
+
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev)", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev)\n", *hostF)
 	}
 
 	// Wait for signal.
@@ -422,7 +476,7 @@ const (
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -445,7 +499,7 @@ const (
 			addr = strings.Replace(addr, "{bool}", *bool_F, -1)
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -455,10 +509,14 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":80"
+				u.Host = net.JoinHostPort(u.Host, "80")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
@@ -476,7 +534,7 @@ const (
 			addr = strings.Replace(addr, "{bool}", *bool_F, -1)
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -486,16 +544,20 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":443"
+				u.Host = net.JoinHostPort(u.Host, "443")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev)", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev)\n", *hostF)
 	}
 
 	// Wait for signal.
@@ -537,7 +599,7 @@ const (
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -551,7 +613,7 @@ const (
 			addr := "http://localhost:80"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -561,16 +623,20 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":80"
+				u.Host = net.JoinHostPort(u.Host, "80")
 			}
 			handleHTTPServer(ctx, u, &wg, errc, logger, *dbgF)
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: svc)", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: svc)\n", *hostF)
 	}
 
 	// Wait for signal.
@@ -630,7 +696,7 @@ const (
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -644,7 +710,7 @@ const (
 			addr := "http://example:8090"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -654,10 +720,14 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":80"
+				u.Host = net.JoinHostPort(u.Host, "80")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
@@ -666,7 +736,7 @@ const (
 			addr := "grpc://localhost:8080"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -676,16 +746,20 @@ const (
 				u.Host = *domainF
 			}
 			if *grpcPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *grpcPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *grpcPortF)
 			} else if u.Port() == "" {
-				u.Host += ":8080"
+				u.Host = net.JoinHostPort(u.Host, "8080")
 			}
 			handleGRPCServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev)", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev)\n", *hostF)
 	}
 
 	// Wait for signal.
@@ -749,7 +823,7 @@ const (
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -763,7 +837,7 @@ const (
 			addr := "http://example:8090"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -773,10 +847,14 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":80"
+				u.Host = net.JoinHostPort(u.Host, "80")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, anotherServiceEndpoints, &wg, errc, logger, *dbgF)
 		}
@@ -785,7 +863,7 @@ const (
 			addr := "grpc://localhost:8080"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -795,16 +873,20 @@ const (
 				u.Host = *domainF
 			}
 			if *grpcPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *grpcPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *grpcPortF)
 			} else if u.Port() == "" {
-				u.Host += ":8080"
+				u.Host = net.JoinHostPort(u.Host, "8080")
 			}
 			handleGRPCServer(ctx, u, serviceEndpoints, anotherServiceEndpoints, &wg, errc, logger, *dbgF)
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev)", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev)\n", *hostF)
 	}
 
 	// Wait for signal.
@@ -863,7 +945,7 @@ const (
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -877,7 +959,7 @@ const (
 			addr := "http://example:8090"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -887,10 +969,14 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":80"
+				u.Host = net.JoinHostPort(u.Host, "80")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
@@ -900,7 +986,7 @@ const (
 			addr := "https://example"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -910,16 +996,20 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":443"
+				u.Host = net.JoinHostPort(u.Host, "443")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev|stage)", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev|stage)\n", *hostF)
 	}
 
 	// Wait for signal.
@@ -981,7 +1071,7 @@ const (
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -1003,13 +1093,13 @@ const (
 				}
 			}
 			if !versionSeen {
-				fmt.Fprintf(os.Stderr, "invalid value for URL 'version' variable: %q (valid values: v1,v2)", *versionF)
+				fmt.Fprintf(os.Stderr, "invalid value for URL 'version' variable: %q (valid values: v1,v2)\n", *versionF)
 				os.Exit(1)
 			}
 			addr = strings.Replace(addr, "{version}", *versionF, -1)
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -1019,10 +1109,14 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":80"
+				u.Host = net.JoinHostPort(u.Host, "80")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
@@ -1034,7 +1128,7 @@ const (
 			addr = strings.Replace(addr, "{port}", *portF, -1)
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -1044,16 +1138,20 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":443"
+				u.Host = net.JoinHostPort(u.Host, "443")
 			}
 			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev|stage)", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: dev|stage)\n", *hostF)
 	}
 
 	// Wait for signal.
@@ -1112,7 +1210,7 @@ const (
 	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errc <- fmt.Errorf("%s", <-c)
 	}()
 
@@ -1126,7 +1224,7 @@ const (
 			addr := "http://localhost:80"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -1136,10 +1234,14 @@ const (
 				u.Host = *domainF
 			}
 			if *httpPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *httpPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
 			} else if u.Port() == "" {
-				u.Host += ":80"
+				u.Host = net.JoinHostPort(u.Host, "80")
 			}
 			handleHTTPServer(ctx, u, serviceWithSpacesEndpoints, &wg, errc, logger, *dbgF)
 		}
@@ -1148,7 +1250,7 @@ const (
 			addr := "grpc://localhost:8080"
 			u, err := url.Parse(addr)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s", addr, err)
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
 				os.Exit(1)
 			}
 			if *secureF {
@@ -1158,16 +1260,340 @@ const (
 				u.Host = *domainF
 			}
 			if *grpcPortF != "" {
-				h := strings.Split(u.Host, ":")[0]
-				u.Host = h + ":" + *grpcPortF
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *grpcPortF)
 			} else if u.Port() == "" {
-				u.Host += ":8080"
+				u.Host = net.JoinHostPort(u.Host, "8080")
 			}
 			handleGRPCServer(ctx, u, serviceWithSpacesEndpoints, &wg, errc, logger, *dbgF)
 		}
 
 	default:
-		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: svc)", *hostF)
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: svc)\n", *hostF)
+	}
+
+	// Wait for signal.
+	logger.Printf("exiting (%v)", <-errc)
+
+	// Send cancellation signal to the goroutines.
+	cancel()
+
+	wg.Wait()
+	logger.Println("exited")
+}
+`
+
+	ServiceForOnlyHTTPServerMainCode = `func main() {
+	// Define command line flags, add any other flag required to configure the
+	// service.
+	var (
+		hostF     = flag.String("host", "localhost", "Server host (valid values: localhost)")
+		domainF   = flag.String("domain", "", "Host domain name (overrides host domain specified in service design)")
+		httpPortF = flag.String("http-port", "", "HTTP port (overrides host HTTP port specified in service design)")
+		secureF   = flag.Bool("secure", false, "Use secure scheme (https or grpcs)")
+		dbgF      = flag.Bool("debug", false, "Log request and response bodies")
+	)
+	flag.Parse()
+
+	// Setup logger. Replace logger with your own log package of choice.
+	var (
+		logger *log.Logger
+	)
+	{
+		logger = log.New(os.Stderr, "[testapi] ", log.Ltime)
+	}
+
+	// Initialize the services.
+	var (
+		serviceSvc service.Service
+	)
+	{
+		serviceSvc = testapi.NewService(logger)
+	}
+
+	// Wrap the services in endpoints that can be invoked from other services
+	// potentially running in different processes.
+	var (
+		serviceEndpoints *service.Endpoints
+	)
+	{
+		serviceEndpoints = service.NewEndpoints(serviceSvc)
+	}
+
+	// Create channel used by both the signal handler and server goroutines
+	// to notify the main goroutine when to stop the server.
+	errc := make(chan error)
+
+	// Setup interrupt handler. This optional step configures the process so
+	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		errc <- fmt.Errorf("%s", <-c)
+	}()
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start the servers and send errors (if any) to the error channel.
+	switch *hostF {
+	case "localhost":
+		{
+			addr := "http://localhost:80"
+			u, err := url.Parse(addr)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
+				os.Exit(1)
+			}
+			if *secureF {
+				u.Scheme = "https"
+			}
+			if *domainF != "" {
+				u.Host = *domainF
+			}
+			if *httpPortF != "" {
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
+			} else if u.Port() == "" {
+				u.Host = net.JoinHostPort(u.Host, "80")
+			}
+			handleHTTPServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
+		}
+
+	default:
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: localhost)\n", *hostF)
+	}
+
+	// Wait for signal.
+	logger.Printf("exiting (%v)", <-errc)
+
+	// Send cancellation signal to the goroutines.
+	cancel()
+
+	wg.Wait()
+	logger.Println("exited")
+}
+`
+
+	ServiceForOnlyGRPCServerMainCode = `func main() {
+	// Define command line flags, add any other flag required to configure the
+	// service.
+	var (
+		hostF     = flag.String("host", "localhost", "Server host (valid values: localhost)")
+		domainF   = flag.String("domain", "", "Host domain name (overrides host domain specified in service design)")
+		grpcPortF = flag.String("grpc-port", "", "gRPC port (overrides host gRPC port specified in service design)")
+		secureF   = flag.Bool("secure", false, "Use secure scheme (https or grpcs)")
+		dbgF      = flag.Bool("debug", false, "Log request and response bodies")
+	)
+	flag.Parse()
+
+	// Setup logger. Replace logger with your own log package of choice.
+	var (
+		logger *log.Logger
+	)
+	{
+		logger = log.New(os.Stderr, "[testapi] ", log.Ltime)
+	}
+
+	// Initialize the services.
+	var (
+		serviceSvc service.Service
+	)
+	{
+		serviceSvc = testapi.NewService(logger)
+	}
+
+	// Wrap the services in endpoints that can be invoked from other services
+	// potentially running in different processes.
+	var (
+		serviceEndpoints *service.Endpoints
+	)
+	{
+		serviceEndpoints = service.NewEndpoints(serviceSvc)
+	}
+
+	// Create channel used by both the signal handler and server goroutines
+	// to notify the main goroutine when to stop the server.
+	errc := make(chan error)
+
+	// Setup interrupt handler. This optional step configures the process so
+	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		errc <- fmt.Errorf("%s", <-c)
+	}()
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start the servers and send errors (if any) to the error channel.
+	switch *hostF {
+	case "localhost":
+
+		{
+			addr := "grpc://localhost:8080"
+			u, err := url.Parse(addr)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
+				os.Exit(1)
+			}
+			if *secureF {
+				u.Scheme = "grpcs"
+			}
+			if *domainF != "" {
+				u.Host = *domainF
+			}
+			if *grpcPortF != "" {
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *grpcPortF)
+			} else if u.Port() == "" {
+				u.Host = net.JoinHostPort(u.Host, "8080")
+			}
+			handleGRPCServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
+		}
+
+	default:
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: localhost)\n", *hostF)
+	}
+
+	// Wait for signal.
+	logger.Printf("exiting (%v)", <-errc)
+
+	// Send cancellation signal to the goroutines.
+	cancel()
+
+	wg.Wait()
+	logger.Println("exited")
+}
+`
+
+	ServiceForHTTPAndPartOfGRPCServerMainCode = `func main() {
+	// Define command line flags, add any other flag required to configure the
+	// service.
+	var (
+		hostF     = flag.String("host", "localhost", "Server host (valid values: localhost)")
+		domainF   = flag.String("domain", "", "Host domain name (overrides host domain specified in service design)")
+		httpPortF = flag.String("http-port", "", "HTTP port (overrides host HTTP port specified in service design)")
+		grpcPortF = flag.String("grpc-port", "", "gRPC port (overrides host gRPC port specified in service design)")
+		secureF   = flag.Bool("secure", false, "Use secure scheme (https or grpcs)")
+		dbgF      = flag.Bool("debug", false, "Log request and response bodies")
+	)
+	flag.Parse()
+
+	// Setup logger. Replace logger with your own log package of choice.
+	var (
+		logger *log.Logger
+	)
+	{
+		logger = log.New(os.Stderr, "[testapi] ", log.Ltime)
+	}
+
+	// Initialize the services.
+	var (
+		serviceSvc        service.Service
+		anotherServiceSvc anotherservice.Service
+	)
+	{
+		serviceSvc = testapi.NewService(logger)
+		anotherServiceSvc = testapi.NewAnotherService(logger)
+	}
+
+	// Wrap the services in endpoints that can be invoked from other services
+	// potentially running in different processes.
+	var (
+		serviceEndpoints        *service.Endpoints
+		anotherServiceEndpoints *anotherservice.Endpoints
+	)
+	{
+		serviceEndpoints = service.NewEndpoints(serviceSvc)
+		anotherServiceEndpoints = anotherservice.NewEndpoints(anotherServiceSvc)
+	}
+
+	// Create channel used by both the signal handler and server goroutines
+	// to notify the main goroutine when to stop the server.
+	errc := make(chan error)
+
+	// Setup interrupt handler. This optional step configures the process so
+	// that SIGINT and SIGTERM signals cause the services to stop gracefully.
+	go func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		errc <- fmt.Errorf("%s", <-c)
+	}()
+
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Start the servers and send errors (if any) to the error channel.
+	switch *hostF {
+	case "localhost":
+		{
+			addr := "http://localhost:80"
+			u, err := url.Parse(addr)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
+				os.Exit(1)
+			}
+			if *secureF {
+				u.Scheme = "https"
+			}
+			if *domainF != "" {
+				u.Host = *domainF
+			}
+			if *httpPortF != "" {
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *httpPortF)
+			} else if u.Port() == "" {
+				u.Host = net.JoinHostPort(u.Host, "80")
+			}
+			handleHTTPServer(ctx, u, serviceEndpoints, anotherServiceEndpoints, &wg, errc, logger, *dbgF)
+		}
+
+		{
+			addr := "grpc://localhost:8080"
+			u, err := url.Parse(addr)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", addr, err)
+				os.Exit(1)
+			}
+			if *secureF {
+				u.Scheme = "grpcs"
+			}
+			if *domainF != "" {
+				u.Host = *domainF
+			}
+			if *grpcPortF != "" {
+				h, _, err := net.SplitHostPort(u.Host)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "invalid URL %#v: %s\n", u.Host, err)
+					os.Exit(1)
+				}
+				u.Host = net.JoinHostPort(h, *grpcPortF)
+			} else if u.Port() == "" {
+				u.Host = net.JoinHostPort(u.Host, "8080")
+			}
+			handleGRPCServer(ctx, u, serviceEndpoints, &wg, errc, logger, *dbgF)
+		}
+
+	default:
+		fmt.Fprintf(os.Stderr, "invalid host argument: %q (valid hosts: localhost)\n", *hostF)
 	}
 
 	// Wait for signal.

@@ -10,9 +10,8 @@ import (
 // ClientTypeFiles returns the HTTP transport client types files.
 func ClientTypeFiles(genpkg string, root *expr.RootExpr) []*codegen.File {
 	fw := make([]*codegen.File, len(root.API.HTTP.Services))
-	seen := make(map[string]struct{})
 	for i, svc := range root.API.HTTP.Services {
-		fw[i] = clientType(genpkg, svc, seen)
+		fw[i] = clientType(genpkg, svc, make(map[string]struct{}))
 	}
 	return fw
 }
@@ -46,7 +45,7 @@ func clientType(genpkg string, svc *expr.HTTPServiceExpr, seen map[string]struct
 	var (
 		path    string
 		data    = HTTPServices.Get(svc.Name())
-		svcName = codegen.SnakeCase(data.Service.VarName)
+		svcName = data.Service.PathName
 	)
 	path = filepath.Join(codegen.Gendir, "http", svcName, "client", "types.go")
 	header := codegen.Header(svc.Name()+" HTTP client types", "client",
@@ -69,6 +68,10 @@ func clientType(genpkg string, svc *expr.HTTPServiceExpr, seen map[string]struct
 	for _, a := range svc.HTTPEndpoints {
 		adata := data.Endpoint(a.Name())
 		if data := adata.Payload.Request.ClientBody; data != nil {
+			if _, ok := seen[data.Name]; ok {
+				continue
+			}
+			seen[data.Name] = struct{}{}
 			if data.Def != "" {
 				sections = append(sections, &codegen.SectionTemplate{
 					Name:   "client-request-body",
@@ -83,8 +86,12 @@ func clientType(genpkg string, svc *expr.HTTPServiceExpr, seen map[string]struct
 				validatedTypes = append(validatedTypes, data)
 			}
 		}
-		if adata.ClientStream != nil {
-			if data := adata.ClientStream.Payload; data != nil {
+		if adata.ClientWebSocket != nil {
+			if data := adata.ClientWebSocket.Payload; data != nil {
+				if _, ok := seen[data.Name]; ok {
+					continue
+				}
+				seen[data.Name] = struct{}{}
 				if data.Def != "" {
 					sections = append(sections, &codegen.SectionTemplate{
 						Name:   "client-request-body",
@@ -107,6 +114,10 @@ func clientType(genpkg string, svc *expr.HTTPServiceExpr, seen map[string]struct
 		adata := data.Endpoint(a.Name())
 		for _, resp := range adata.Result.Responses {
 			if data := resp.ClientBody; data != nil {
+				if _, ok := seen[data.Name]; ok {
+					continue
+				}
+				seen[data.Name] = struct{}{}
 				if data.Def != "" {
 					sections = append(sections, &codegen.SectionTemplate{
 						Name:   "client-response-body",
@@ -127,6 +138,10 @@ func clientType(genpkg string, svc *expr.HTTPServiceExpr, seen map[string]struct
 		for _, gerr := range adata.Errors {
 			for _, herr := range gerr.Errors {
 				if data := herr.Response.ClientBody; data != nil {
+					if _, ok := seen[data.Name]; ok {
+						continue
+					}
+					seen[data.Name] = struct{}{}
 					if data.Def != "" {
 						sections = append(sections, &codegen.SectionTemplate{
 							Name:   "client-error-body",
@@ -170,9 +185,10 @@ func clientType(genpkg string, svc *expr.HTTPServiceExpr, seen map[string]struct
 		for _, resp := range adata.Result.Responses {
 			if init := resp.ResultInit; init != nil {
 				sections = append(sections, &codegen.SectionTemplate{
-					Name:   "client-result-init",
-					Source: clientTypeInitT,
-					Data:   init,
+					Name:    "client-result-init",
+					Source:  clientTypeInitT,
+					Data:    init,
+					FuncMap: map[string]interface{}{"fieldCode": fieldCode},
 				})
 			}
 		}
@@ -182,9 +198,10 @@ func clientType(genpkg string, svc *expr.HTTPServiceExpr, seen map[string]struct
 			for _, herr := range gerr.Errors {
 				if init := herr.Response.ResultInit; init != nil {
 					sections = append(sections, &codegen.SectionTemplate{
-						Name:   "client-error-result-init",
-						Source: clientTypeInitT,
-						Data:   init,
+						Name:    "client-error-result-init",
+						Source:  clientTypeInitT,
+						Data:    init,
+						FuncMap: map[string]interface{}{"fieldCode": fieldCode},
 					})
 				}
 			}
@@ -205,7 +222,7 @@ func clientType(genpkg string, svc *expr.HTTPServiceExpr, seen map[string]struct
 
 // input: InitData
 const clientBodyInitT = `{{ comment .Description }}
-func {{ .Name }}({{ range .ClientArgs }}{{ .Name }} {{.TypeRef }}, {{ end }}) {{ .ReturnTypeRef }} {
+func {{ .Name }}({{ range .ClientArgs }}{{ .VarName }} {{.TypeRef }}, {{ end }}) {{ .ReturnTypeRef }} {
 	{{ .ClientCode }}
 	return body
 }
@@ -213,32 +230,21 @@ func {{ .Name }}({{ range .ClientArgs }}{{ .Name }} {{.TypeRef }}, {{ end }}) {{
 
 // input: InitData
 const clientTypeInitT = `{{ comment .Description }}
-func {{ .Name }}({{- range .ClientArgs }}{{ .Name }} {{ .TypeRef }}, {{ end }}) {{ .ReturnTypeRef }} {
-	{{- if .ClientCode }}
-		{{ .ClientCode }}
-		{{- if .ReturnTypeAttribute }}
+func {{ .Name }}({{- range .ClientArgs }}{{ .VarName }} {{ .TypeRef }}, {{ end }}) {{ .ReturnTypeRef }} {
+{{- if .ClientCode }}
+	{{ .ClientCode }}
+	{{- if .ReturnTypeAttribute }}
 		res := &{{ .ReturnTypeName }}{
 			{{ .ReturnTypeAttribute }}: {{ if .ReturnIsPrimitivePointer }}&{{ end }}v,
 		}
-		{{- end }}
-		{{- if .ReturnIsStruct }}
-			{{- range .ClientArgs }}
-				{{- if .FieldName }}
-			{{ if $.ReturnTypeAttribute }}res{{ else }}v{{ end }}.{{ .FieldName }} = {{ if and (not .Pointer) .FieldPointer }}&{{ end }}{{ .Name }}
-				{{- end }}
-			{{- end }}
-		{{- end }}
-		return {{ if .ReturnTypeAttribute }}res{{ else }}v{{ end }}
-	{{- else }}
-		{{- if .ReturnIsStruct }}
-			return &{{ .ReturnTypeName }}{
-			{{- range .ClientArgs }}
-				{{- if .FieldName }}
-				{{ .FieldName }}: {{ if and (not .Pointer) .FieldPointer }}&{{ end }}{{ .Name }},
-				{{- end }}
-			{{- end }}
-			}
-		{{- end }}
-	{{ end -}}
+	{{- end }}
+{{- end }}
+{{- if .ReturnIsStruct }}
+	{{- if not .ClientCode }}
+	{{ if .ReturnTypeAttribute }}res{{ else }}v{{ end }} := &{{ .ReturnTypeName }}{}
+	{{- end }}
+{{- end }}
+	{{ fieldCode . "client" }}
+	return {{ if .ReturnTypeAttribute }}res{{ else }}v{{ end }}
 }
 `

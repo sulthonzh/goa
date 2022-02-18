@@ -35,7 +35,7 @@ func serverFile(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File {
 		data = GRPCServices.Get(svc.Name())
 	)
 	{
-		svcName := codegen.SnakeCase(data.Service.VarName)
+		svcName := data.Service.PathName
 		fpath = filepath.Join(codegen.Gendir, "grpc", svcName, "server", "server.go")
 		sections = []*codegen.SectionTemplate{
 			codegen.Header(svc.Name()+" gRPC server", "server", []*codegen.ImportSpec{
@@ -47,7 +47,7 @@ func serverFile(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File {
 				{Path: path.Join(genpkg, svcName, "views"), Name: data.Service.ViewsPkg},
 				{Path: path.Join(genpkg, "grpc", svcName, pbPkgName), Name: data.PkgName},
 			}),
-			&codegen.SectionTemplate{Name: "server-struct", Source: serverStructT, Data: data},
+			{Name: "server-struct", Source: serverStructT, Data: data},
 		}
 		for _, e := range data.Endpoints {
 			if e.ServerStream != nil {
@@ -65,7 +65,7 @@ func serverFile(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File {
 		})
 		for _, e := range data.Endpoints {
 			sections = append(sections, &codegen.SectionTemplate{
-				Name:   "handler-init",
+				Name:   "grpc-handler-init",
 				Source: handlerInitT,
 				Data:   e,
 			})
@@ -121,7 +121,7 @@ func serverEncodeDecode(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File 
 		data = GRPCServices.Get(svc.Name())
 	)
 	{
-		svcName := codegen.SnakeCase(data.Service.VarName)
+		svcName := data.Service.PathName
 		fpath = filepath.Join(codegen.Gendir, "grpc", svcName, "server", "encode_decode.go")
 		title := fmt.Sprintf("%s gRPC server encoders and decoders", svc.Name())
 		sections = []*codegen.SectionTemplate{
@@ -129,6 +129,7 @@ func serverEncodeDecode(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File 
 				{Path: "context"},
 				{Path: "strings"},
 				{Path: "strconv"},
+				{Path: "unicode/utf8"},
 				{Path: "google.golang.org/grpc"},
 				{Path: "google.golang.org/grpc/metadata"},
 				codegen.GoaImport(""),
@@ -199,6 +200,7 @@ type {{ .ServerStruct }} struct {
 {{- range .Endpoints }}
 	{{ .Method.VarName }}H {{ if .ServerStream }}goagrpc.StreamHandler{{ else }}goagrpc.UnaryHandler{{ end }}
 {{- end }}
+	{{ .PkgName }}.Unimplemented{{ .ServerInterface }}
 }
 
 // ErrorNamer is an interface implemented by generated error structs that
@@ -242,7 +244,7 @@ func (s *{{ .ServerStruct }}) {{ .Method.VarName }}(
 	ctx = context.WithValue(ctx, goa.ServiceKey, {{ printf "%q" .ServiceName }})
 
 {{- if .ServerStream }}
-	p, err := s.{{ .Method.VarName }}H.Decode(ctx, {{ if .Method.StreamingPayload }}nil{{ else }}message{{ end }})
+	{{if .PayloadRef }}p{{ else }}_{{ end }}, err := s.{{ .Method.VarName }}H.Decode(ctx, {{ if .Method.StreamingPayload }}nil{{ else }}message{{ end }})
 	{{- template "handle_error" . }}
 	ep := &{{ .ServicePkgName }}.{{ .Method.VarName }}EndpointInput{
 		Stream: &{{ .ServerStream.VarName }}{stream: stream},
@@ -329,12 +331,12 @@ func Decode{{ .Method.VarName }}Request(ctx context.Context, v interface{}, md m
 				if vals := md.Get({{ printf "%q" .Name }}); len(vals) == 0 {
 					err = goa.MergeErrors(err, goa.MissingFieldError({{ printf "%q" .Name }}, "metadata"))
 				} else {
-					{{ .VarName }}Raw = vals[0]
+					{{ .VarName }}Raw := vals[0]
 					{{ template "type_conversion" . }}
 				}
 			{{- else }}
 				if vals := md.Get({{ printf "%q" .Name }}); len(vals) > 0 {
-					{{ .VarName }}Raw = vals[0]
+					{{ .VarName }}Raw := vals[0]
 					{{ template "type_conversion" . }}
 				}
 			{{- end }}

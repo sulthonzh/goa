@@ -53,11 +53,12 @@ func exampleServer(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *co
 			codegen.GoaNamedImport("grpc", "goagrpc"),
 			codegen.GoaNamedImport("grpc/middleware", "grpcmdlwr"),
 			{Path: "google.golang.org/grpc"},
+			{Path: "google.golang.org/grpc/reflection"},
 			{Path: "github.com/grpc-ecosystem/go-grpc-middleware", Name: "grpcmiddleware"},
 		}
 		for _, svc := range root.API.GRPC.Services {
 			sd := GRPCServices.Get(svc.Name())
-			svcName := codegen.SnakeCase(sd.Service.VarName)
+			svcName := sd.Service.PathName
 			specs = append(specs, &codegen.ImportSpec{
 				Path: path.Join(genpkg, "grpc", svcName, "server"),
 				Name: scope.Unique(sd.Service.PkgName + "svr"),
@@ -100,22 +101,22 @@ func exampleServer(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *co
 		}
 		sections = []*codegen.SectionTemplate{
 			codegen.Header("", "main", specs),
-			&codegen.SectionTemplate{
+			{
 				Name:   "server-grpc-start",
 				Source: grpcSvrStartT,
 				Data: map[string]interface{}{
 					"Services": svcdata,
 				},
-			},
-			&codegen.SectionTemplate{Name: "server-grpc-logger", Source: grpcSvrLoggerT},
-			&codegen.SectionTemplate{
+			}, {
+				Name:   "server-grpc-logger",
+				Source: grpcSvrLoggerT,
+			}, {
 				Name:   "server-grpc-init",
 				Source: grpcSvrInitT,
 				Data: map[string]interface{}{
 					"Services": svcdata,
 				},
-			},
-			&codegen.SectionTemplate{
+			}, {
 				Name:   "server-grpc-register",
 				Source: grpcRegisterSvrT,
 				Data: map[string]interface{}{
@@ -125,8 +126,7 @@ func exampleServer(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr) *co
 					"goify":      codegen.Goify,
 					"needStream": needStream,
 				},
-			},
-			&codegen.SectionTemplate{
+			}, {
 				Name:   "server-grpc-end",
 				Source: grpcSvrEndT,
 				Data: map[string]interface{}{
@@ -215,6 +215,10 @@ func handleGRPCServer(ctx context.Context, u *url.URL{{ range $.Services }}{{ if
 			logger.Printf("serving gRPC method %s", svc + "/" + m.Name)
 		}
 	}
+
+	// Register the server reflection service on the server.
+	// See https://grpc.github.io/grpc/core/md_doc_server-reflection.html.
+	reflection.Register(srv)
 `
 
 	// input: map[string]interface{}{"Services":[]*ServiceData}

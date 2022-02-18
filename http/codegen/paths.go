@@ -22,7 +22,7 @@ func PathFiles(root *expr.RootExpr) []*codegen.File {
 // for the given service.
 func serverPath(svc *expr.HTTPServiceExpr) *codegen.File {
 	sd := HTTPServices.Get(svc.Name())
-	path := filepath.Join(codegen.Gendir, "http", codegen.SnakeCase(sd.Service.VarName), "server", "paths.go")
+	path := filepath.Join(codegen.Gendir, "http", sd.Service.PathName, "server", "paths.go")
 	return &codegen.File{Path: path, SectionTemplates: pathSections(svc, "server")}
 }
 
@@ -30,7 +30,7 @@ func serverPath(svc *expr.HTTPServiceExpr) *codegen.File {
 // for the given service.
 func clientPath(svc *expr.HTTPServiceExpr) *codegen.File {
 	sd := HTTPServices.Get(svc.Name())
-	path := filepath.Join(codegen.Gendir, "http", codegen.SnakeCase(sd.Service.VarName), "client", "paths.go")
+	path := filepath.Join(codegen.Gendir, "http", sd.Service.PathName, "client", "paths.go")
 	return &codegen.File{Path: path, SectionTemplates: pathSections(svc, "client")}
 }
 
@@ -60,7 +60,7 @@ func pathSections(svc *expr.HTTPServiceExpr, pkg string) []*codegen.SectionTempl
 
 // input: EndpointData
 const pathT = `{{ range .Routes }}// {{ .PathInit.Description }}
-func {{ .PathInit.Name }}({{ range .PathInit.ServerArgs }}{{ .Name }} {{ .TypeRef }}, {{ end }}) {{ .PathInit.ReturnTypeRef }} {
+func {{ .PathInit.Name }}({{ range .PathInit.ServerArgs }}{{ .VarName }} {{ .TypeRef }}, {{ end }}) {{ .PathInit.ReturnTypeRef }} {
 {{- .PathInit.ServerCode }}
 }
 {{ end }}`

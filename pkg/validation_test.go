@@ -12,14 +12,21 @@ import (
 
 func TestValidateFormat(t *testing.T) {
 	var (
-		validDate       = "2015-10-26"
-		invalidDate     = "201510-26"
-		validDateTime   = "2015-10-26T08:31:23Z"
-		invalidDateTime = "201510-26T08:31:23Z"
-		validUUID       = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
-		invalidUUID     = "96054a62-a9e45ed26688389b"
-		validEmail      = "raphael@goa.design"
-		invalidEmail    = "foo"
+		validDate              = "2015-10-26"
+		invalidDate            = "201510-26"
+		validDateTime          = "2015-10-26T08:31:23Z"
+		invalidDateTime        = "201510-26T08:31:23Z"
+		validUUID              = "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+		validUUIDWithBrace     = "{6ba7b810-9dad-11d1-80b4-00c04fd430c8}"
+		validUUIDRaw           = "6ba7b8109dad11d180b400c04fd430c8"
+		validUUIDWithURNPrefix = "urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+		invalidUUID            = "96054a62-a9e45ed26688389b"
+		invalidUUIDNonHex      = "abcdefgh-ijkl-mnop-qrst-uvqxyz012345" // UUID with characters other than hex digit
+		validEmail             = "raphael@goa.design"
+
+		// Re-enable once CircleCI uses Go 1.13
+		// invalidEmail    = "foo"
+
 		validHostname   = "goa.design"
 		invalidHostname = "_hi_"
 		validIPv4       = "192.168.0.1"
@@ -45,14 +52,22 @@ func TestValidateFormat(t *testing.T) {
 		format   Format
 		expected error
 	}{
-		"valid date":         {"validDate", validDate, FormatDate, nil},
-		"invalid date":       {"invalidDate", invalidDate, FormatDate, InvalidFormatError("invalidDate", invalidDate, FormatDate, &time.ParseError{Layout: "2006-01-02", Value: invalidDate, LayoutElem: "-", ValueElem: invalidDate[4:]})},
-		"valid date-time":    {"validDateTime", validDateTime, FormatDateTime, nil},
-		"invalid date-time":  {"invalidDateTime", invalidDateTime, FormatDateTime, InvalidFormatError("invalidDateTime", invalidDateTime, FormatDateTime, &time.ParseError{Layout: time.RFC3339, Value: invalidDateTime, LayoutElem: "-", ValueElem: invalidDateTime[4:]})},
-		"valid uuid":         {"validUUID", validUUID, FormatUUID, nil},
-		"invalid uuid":       {"invalidUUID", invalidUUID, FormatUUID, InvalidFormatError("invalidUUID", invalidUUID, FormatUUID, fmt.Errorf("uuid: UUID string too short: %s", invalidUUID))},
-		"valid email":        {"validEmail", validEmail, FormatEmail, nil},
-		"invalid email":      {"invalidEmail", invalidEmail, FormatEmail, InvalidFormatError("invalidEmail", invalidEmail, FormatEmail, errors.New("mail: no angle-addr"))},
+		"valid date":                 {"validDate", validDate, FormatDate, nil},
+		"invalid date":               {"invalidDate", invalidDate, FormatDate, InvalidFormatError("invalidDate", invalidDate, FormatDate, &time.ParseError{Layout: "2006-01-02", Value: invalidDate, LayoutElem: "-", ValueElem: invalidDate[4:]})},
+		"valid date-time":            {"validDateTime", validDateTime, FormatDateTime, nil},
+		"invalid date-time":          {"invalidDateTime", invalidDateTime, FormatDateTime, InvalidFormatError("invalidDateTime", invalidDateTime, FormatDateTime, &time.ParseError{Layout: time.RFC3339, Value: invalidDateTime, LayoutElem: "-", ValueElem: invalidDateTime[4:]})},
+		"valid uuid":                 {"validUUID", validUUID, FormatUUID, nil},
+		"valid uuid with brace":      {"validUUIDWithBrace", validUUIDWithBrace, FormatUUID, nil},
+		"valid uuid with no dash":    {"validUUIDRaw", validUUIDRaw, FormatUUID, nil},
+		"valid uuid with urn prefix": {"validUUIDWithURNPrefix", validUUIDWithURNPrefix, FormatUUID, nil},
+		"invalid uuid":               {"invalidUUID", invalidUUID, FormatUUID, InvalidFormatError("invalidUUID", invalidUUID, FormatUUID, fmt.Errorf("uuid: %s: invalid UUID length: 25", invalidUUID))},
+		"invalid uuid non hex":       {"invalidUUIDNonHex", invalidUUIDNonHex, FormatUUID, InvalidFormatError("invalidUUIDNonHex", invalidUUIDNonHex, FormatUUID, fmt.Errorf("uuid: %s: invalid UUID format", invalidUUIDNonHex))},
+
+		"valid email": {"validEmail", validEmail, FormatEmail, nil},
+
+		// Re-enable once CircleCI uses Go 1.13
+		// "invalid email":      {"invalidEmail", invalidEmail, FormatEmail, InvalidFormatError("invalidEmail", invalidEmail, FormatEmail, errors.New("mail: missing '@' or angle-addr"))},
+
 		"valid hostname":     {"validHostname", validHostname, FormatHostname, nil},
 		"invalid hostname":   {"invalidHostname", invalidHostname, FormatHostname, InvalidFormatError("invalidHostname", invalidHostname, FormatHostname, fmt.Errorf("hostname value '%s' does not match %s", invalidHostname, `^[[:alnum:]][[:alnum:]\-]{0,61}[[:alnum:]]|[[:alpha:]]$`))},
 		"valid ipv4":         {"validIPv4", validIPv4, FormatIPv4, nil},
@@ -83,7 +98,7 @@ func TestValidateFormat(t *testing.T) {
 		actual := ValidateFormat(tc.name, tc.val, tc.format)
 		if actual != tc.expected {
 			// Compare only the messages because the error has always a new error ID.
-			if actual.Error() != tc.expected.Error() {
+			if actual == nil || tc.expected == nil || actual.Error() != tc.expected.Error() {
 				t.Errorf("%s: got %#v, expected %#v", k, actual, tc.expected)
 			}
 		}

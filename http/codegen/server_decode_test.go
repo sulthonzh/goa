@@ -94,6 +94,7 @@ func TestDecode(t *testing.T) {
 		{"query-string-mapped", testdata.PayloadQueryStringMappedDSL, testdata.PayloadQueryStringMappedDecodeCode},
 
 		{"query-string-default", testdata.PayloadQueryStringDefaultDSL, testdata.PayloadQueryStringDefaultDecodeCode},
+		{"query-string-slice-default", testdata.PayloadQueryStringSliceDefaultDSL, testdata.PayloadQueryStringSliceDefaultDecodeCode},
 		{"query-string-default-validate", testdata.PayloadQueryStringDefaultValidateDSL, testdata.PayloadQueryStringDefaultValidateDecodeCode},
 		{"query-primitive-string-default", testdata.PayloadQueryPrimitiveStringDefaultDSL, testdata.PayloadQueryPrimitiveStringDefaultDecodeCode},
 		{"query-string-extended-payload", testdata.PayloadExtendedQueryStringDSL, testdata.PayloadExtendedQueryStringDecodeCode},
@@ -122,12 +123,24 @@ func TestDecode(t *testing.T) {
 		{"header-string-default-validate", testdata.PayloadHeaderStringDefaultValidateDSL, testdata.PayloadHeaderStringDefaultValidateDecodeCode},
 		{"header-primitive-string-default", testdata.PayloadHeaderPrimitiveStringDefaultDSL, testdata.PayloadHeaderPrimitiveStringDefaultDecodeCode},
 
+		{"cookie-string", testdata.PayloadCookieStringDSL, testdata.PayloadCookieStringDecodeCode},
+		{"cookie-string-validate", testdata.PayloadCookieStringValidateDSL, testdata.PayloadCookieStringValidateDecodeCode},
+
+		{"cookie-primitive-string-validate", testdata.PayloadCookiePrimitiveStringValidateDSL, testdata.PayloadCookiePrimitiveStringValidateDecodeCode},
+		{"cookie-primitive-bool-validate", testdata.PayloadCookiePrimitiveBoolValidateDSL, testdata.PayloadCookiePrimitiveBoolValidateDecodeCode},
+
+		{"cookie-string-default", testdata.PayloadCookieStringDefaultDSL, testdata.PayloadCookieStringDefaultDecodeCode},
+		{"cookie-string-default-validate", testdata.PayloadCookieStringDefaultValidateDSL, testdata.PayloadCookieStringDefaultValidateDecodeCode},
+		{"cookie-primitive-string-default", testdata.PayloadCookiePrimitiveStringDefaultDSL, testdata.PayloadCookiePrimitiveStringDefaultDecodeCode},
+
 		{"body-string", testdata.PayloadBodyStringDSL, testdata.PayloadBodyStringDecodeCode},
 		{"body-string-validate", testdata.PayloadBodyStringValidateDSL, testdata.PayloadBodyStringValidateDecodeCode},
 		{"body-user", testdata.PayloadBodyUserDSL, testdata.PayloadBodyUserDecodeCode},
 		{"body-user-required", testdata.PayloadBodyUserRequiredDSL, testdata.PayloadBodyUserRequiredDecodeCode},
 		{"body-user-nested", testdata.PayloadBodyNestedUserDSL, testdata.PayloadBodyNestedUserDecodeCode},
 		{"body-user-validate", testdata.PayloadBodyUserValidateDSL, testdata.PayloadBodyUserValidateDecodeCode},
+		{"body-object", testdata.PayloadBodyObjectDSL, testdata.PayloadBodyObjectDecodeCode},
+		{"body-object-validate", testdata.PayloadBodyObjectValidateDSL, testdata.PayloadBodyObjectValidateDecodeCode},
 		{"body-array-string", testdata.PayloadBodyArrayStringDSL, testdata.PayloadBodyArrayStringDecodeCode},
 		{"body-array-string-validate", testdata.PayloadBodyArrayStringValidateDSL, testdata.PayloadBodyArrayStringValidateDecodeCode},
 		{"body-array-user", testdata.PayloadBodyArrayUserDSL, testdata.PayloadBodyArrayUserDecodeCode},
@@ -171,6 +184,17 @@ func TestDecode(t *testing.T) {
 		{"multipart-body-array-type", testdata.PayloadMultipartArrayTypeDSL, testdata.PayloadMultipartArrayTypeDecodeCode},
 		{"multipart-body-map-type", testdata.PayloadMultipartMapTypeDSL, testdata.PayloadMultipartMapTypeDecodeCode},
 		{"with-params-and-headers-dsl", testdata.WithParamsAndHeadersBlockDSL, testdata.WithParamsAndHeadersBlockDecodeCode},
+
+		// aliases
+		{"query-int-alias", testdata.QueryIntAliasDSL, testdata.QueryIntAliasDecodeCode},
+		{"query-int-alias-validate", testdata.QueryIntAliasValidateDSL, testdata.QueryIntAliasValidateDecodeCode},
+		{"query-array-alias", testdata.QueryArrayAliasDSL, testdata.QueryArrayAliasDecodeCode},
+		{"query-array-alias-validate", testdata.QueryArrayAliasValidateDSL, testdata.QueryArrayAliasValidateDecodeCode},
+		{"query-map-alias", testdata.QueryMapAliasDSL, testdata.QueryMapAliasDecodeCode},
+		{"query-map-alias-validate", testdata.QueryMapAliasValidateDSL, testdata.QueryMapAliasValidateDecodeCode},
+		{"query-array-nested-alias-validate", testdata.QueryArrayNestedAliasValidateDSL, testdata.QueryArrayNestedAliasValidateDecodeCode},
+		{"header-int-alias", testdata.HeaderIntAliasDSL, testdata.HeaderIntAliasDecodeCode},
+		{"path-int-alias", testdata.PathIntAliasDSL, testdata.PathIntAliasDecodeCode},
 	}
 	golden := makeGolden(t, "testdata/payload_decode_functions.go")
 	if golden != nil {

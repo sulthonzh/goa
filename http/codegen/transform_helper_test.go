@@ -16,14 +16,12 @@ func TestTransformHelperServer(t *testing.T) {
 		Offset int
 	}{
 		{"body-user-inner-default-1", testdata.PayloadBodyUserInnerDefaultDSL, testdata.PayloadBodyUserInnerDefaultTransformCode1, 1},
-		{"body-user-inner-default-2", testdata.PayloadBodyUserInnerDefaultDSL, testdata.PayloadBodyUserInnerDefaultTransformCode2, 1},
 		{"body-user-recursive-default-1", testdata.PayloadBodyInlineRecursiveUserDSL, testdata.PayloadBodyInlineRecursiveUserTransformCode1, 1},
-		{"body-user-recursive-default-2", testdata.PayloadBodyInlineRecursiveUserDSL, testdata.PayloadBodyInlineRecursiveUserTransformCode2, 1},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
 			RunHTTPDSL(t, c.DSL)
-			f := serverEncodeDecode("", expr.Root.API.HTTP.Services[0])
+			f := serverEncodeDecodeFile("", expr.Root.API.HTTP.Services[0])
 			sections := f.SectionTemplates
 			code := codegen.SectionCode(t, sections[len(sections)-c.Offset])
 			if code != c.Code {
@@ -48,7 +46,7 @@ func TestTransformHelperCLI(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
 			RunHTTPDSL(t, c.DSL)
-			f := clientEncodeDecode("", expr.Root.API.HTTP.Services[0])
+			f := clientEncodeDecodeFile("", expr.Root.API.HTTP.Services[0])
 			sections := f.SectionTemplates
 			code := codegen.SectionCode(t, sections[len(sections)-c.Offset])
 			if code != c.Code {

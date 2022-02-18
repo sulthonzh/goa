@@ -149,6 +149,21 @@ var CustomErrorsDSL = func() {
 	})
 }
 
+var CustomErrorsCustomFieldDSL = func() {
+	var Result = ResultType("application/vnd.goa.error", func() {
+		Attribute("error", String, func() {
+			Meta("struct:error:name")
+			Meta("struct:field:name", "ErrorCode")
+		})
+		Required("error")
+	})
+	Service("CustomErrorsCustomFields", func() {
+		Method("A", func() {
+			Error("struct_error_name", Result, "struct error name description")
+		})
+	})
+}
+
 var MultipleMethodsResultMultipleViewsDSL = func() {
 	var RTWithViews = ResultType("application/vnd.result.multiple.views", func() {
 		TypeName("MultipleViews")
@@ -182,6 +197,34 @@ var MultipleMethodsResultMultipleViewsDSL = func() {
 		})
 		Method("B", func() {
 			Result(RTWithSingleView)
+		})
+	})
+}
+
+var WithExplicitAndDefaultViewsDSL = func() {
+	var RTWithViews = ResultType("application/vnd.result.multiple.views", func() {
+		TypeName("MultipleViews")
+		Attributes(func() {
+			Attribute("a", String)
+			Attribute("b", Int)
+			Required("a", "b")
+		})
+		View("default", func() {
+			Attribute("a")
+			Attribute("b")
+		})
+		View("tiny", func() {
+			Attribute("a")
+		})
+	})
+	Service("WithExplicitAndDefaultViews", func() {
+		Method("A", func() {
+			Result(RTWithViews)
+		})
+		Method("A", func() {
+			Result(RTWithViews, func() {
+				View("tiny")
+			})
 		})
 	})
 }
@@ -291,6 +334,24 @@ var ResultWithResultCollectionMethodDSL = func() {
 	Service("ResultWithResultTypeCollection", func() {
 		Method("A", func() {
 			Result(RT)
+		})
+	})
+}
+
+var ResultWithDashedMimeTypeMethodDSL = func() {
+	var RT = ResultType("application/vnd.application.dashed-type", func() {
+		Attributes(func() {
+			Attribute("name")
+		})
+	})
+	var _ = Service("ResultWithDashedMimeType", func() {
+		Method("A", func() {
+			Result(RT)
+		})
+		Method("list", func() {
+			Result(func() {
+				Attribute("items", CollectionOf(RT))
+			})
 		})
 	})
 }
@@ -529,12 +590,12 @@ var NamesWithSpacesDSL = func() {
 		})
 	})
 	var APayload = Type("Payload With Space", func() {
-		Attribute("String", String)
+		Field(1, "String", String)
 	})
 	var AResult = ResultType("application/vnd.goa.result", func() {
 		TypeName("Result With Space")
 		Attributes(func() {
-			Attribute("Int", Int)
+			Field(1, "Int", Int)
 		})
 	})
 	Service("Service With Spaces", func() {

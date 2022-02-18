@@ -115,7 +115,10 @@ func (e *ErrorExpr) Validate() error {
 		}
 		return nil
 	})
-	return verr
+	if len(verr.Errors) > 0 {
+		return verr
+	}
+	return nil
 }
 
 // Finalize makes sure the error type is a user type since it has to generate a
@@ -137,7 +140,7 @@ func (e *ErrorExpr) Finalize() {
 			// This type does not have an attribute with "struct:error:name" meta.
 			// It means the type is used by at most one error (otherwise validations
 			// would have failed).
-			dt.Attribute().Meta["struct:error:name"] = []string{e.Name}
+			dt.Attribute().AddMeta("struct:error:name", e.Name)
 		}
 	default:
 		ut := &UserTypeExpr{

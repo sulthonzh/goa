@@ -26,6 +26,9 @@ import (
 func goTypeDef(scope *codegen.NameScope, att *expr.AttributeExpr, ptr, useDefault bool) string {
 	switch actual := att.Type.(type) {
 	case expr.Primitive:
+		if t, _ := codegen.GetMetaType(att); t != "" {
+			return t
+		}
 		return codegen.GoNativeTypeName(actual)
 	case *expr.Array:
 		d := goTypeDef(scope, actual.ElemType, ptr, useDefault)
@@ -68,7 +71,18 @@ func goTypeDef(scope *codegen.NameScope, att *expr.AttributeExpr, ptr, useDefaul
 				if at.Description != "" {
 					desc = codegen.Comment(at.Description) + "\n\t"
 				}
-				tags = attributeTags(mat, at, elem, ptr || !ma.IsRequired(name))
+				var optional bool
+				{
+					switch {
+					case ptr:
+						optional = true
+					case useDefault:
+						optional = !ma.IsRequired(name) && !ma.HasDefaultValue(name)
+					default:
+						optional = !ma.IsRequired(name)
+					}
+				}
+				tags = attributeTags(mat, at, elem, optional)
 			}
 			ss = append(ss, fmt.Sprintf("\t%s%s %s%s", desc, fn, tdef, tags))
 			return nil

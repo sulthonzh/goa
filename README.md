@@ -1,14 +1,11 @@
-#
-
 ![Goa logo](https://goa.design/img/goa-logo.svg "Goa")
 
 Goa is a framework for building micro-services and APIs in Go using a unique
 design-first approach.
 
 ---
-[![Build Status](https://travis-ci.org/goadesign/goa.svg?branch=v3)](https://travis-ci.org/goadesign/goa)
-[![Windows Build status](https://ci.appveyor.com/api/projects/status/vixp37loj5i6qmaf/branch/v3?svg=true)](https://ci.appveyor.com/project/RaphaelSimon/goa-oqtis/branch/v3)
-[![Godoc](https://godoc.org/goa.design/goa?status.svg)](https://godoc.org/goa.design/goa)
+[![Build Status](https://github.com/goadesign/goa/workflows/build/badge.svg?branch=v3&event=push)](https://github.com/goadesign/goa/actions?query=branch%3Av3+event%3Apush)
+[![DSL GoDoc](https://img.shields.io/badge/godoc-DSL-blue)](https://pkg.go.dev/goa.design/goa/v3@v3.5.5/dsl?tab=doc)
 [![Slack](https://img.shields.io/badge/slack-gophers-orange.svg?style=flat)](https://gophers.slack.com/messages/goa/)
 
 ## Overview
@@ -17,7 +14,7 @@ Goa takes a different approach to building services by making it possible to
 describe the *design* of the service API using a simple Go DSL. Goa uses the
 description to generate specialized service helper code, client code and
 documentation. Goa is extensible via plugins, for example the
-[goakit](https://github.com/goadesign/plugins/tree/master/goakit) plugin
+[goakit](https://github.com/goadesign/plugins/tree/v3/goakit) plugin
 generates code that leverage the Go kit library.
 
 The service design describes the transport independent layer of the services in
@@ -48,71 +45,15 @@ invoking the client code.
 
 ## Installation
 
-Assuming you have a working [Go](https://golang.org) setup, and are in a
-directory where a `go.mod` file is present:
-
 ```bash
-export GO111MODULE=on
-go get -u goa.design/goa/v3
-go get -u goa.design/goa/v3/...
+go install goa.design/goa/v3/cmd/goa@v3
 ```
 
-If you don't have a `go.mod` file present, and only want to install the
-Goa command globally:
+>Note: Goa requires the use of Go modules.
 
-```bash
-go get -u goa.design/goa/v3/cmd/goa
-```
-
-Alternatively, when NOT using Go modules (this installs Goa v2, see below):
-
-```bash
-go get -u goa.design/goa/...
-```
-
-### Goa Versions and Go Module Support
-
-Goa v2 and Goa v3 are functionally the exact same. The only addition provided by
-Goa v3 is Go module support. Goa v3 requires Go v1.11 or above, it also requires
-projects that use Goa to be within modules.
-
-Projects that use Goa v3 use `goa.design/goa/v3` as root package import path
-while projects that use v2 use `goa.design/goa` (projects that use v1 use
-`github.com/goadesign/goa`).
-
-Note that the Goa v3 tool is backwards compatible and can generate code for v2
-designs. This means that you don't need to swap the tool to generate code for
-designs using v2 or v3 (designs using v1 use a different tool altogether).
-
-### Vendoring
-
-Since Goa generates and compiles code vendoring tools are not able to
-automatically identify all the dependencies. In particular the `generator`
-package is only used by the generated code. To alleviate this issue simply add
-`goa.design/goa/codegen/generator` as a required package to the vendor manifest.
-For example if you are using `dep` add the following line to `Gopkg.toml`:
-
-``` toml
-required = ["goa.design/goa/codegen/generator"]
-```
-
-This only applies to Goa v2 as vendoring is not used together with Go modules.
-
-### Stable Versions
-
-Goa follows [Semantic Versioning](http://semver.org/) which is a fancy way of
-saying it publishes releases with version numbers of the form `vX.Y.Z` and makes
-sure that your code can upgrade to new versions with the same `X` component
-without having to make changes.
-
-Releases are tagged with the corresponding version number. There is also a
-branch for each major version (`v1`, `v2` and `v3`).
-
-Current Release: `v3.0.3`
+Current Release: `v3.5.5`
 
 ## Teaser
-
-Note: the instructions below assume Goa v3.
 
 ### 1. Design
 
@@ -135,9 +76,9 @@ import . "goa.design/goa/v3/dsl"
 // API describes the global properties of the API server.
 var _ = API("calc", func() {
         Title("Calculator Service")
-        Description("HTTP service for adding numbers, a goa teaser")
+        Description("HTTP service for multiplying numbers, a goa teaser")
         Server("calc", func() {
-		Host("localhost", func() { URI("http://localhost:8088") })
+                Host("localhost", func() { URI("http://localhost:8088") })
         })
 })
 
@@ -145,14 +86,14 @@ var _ = API("calc", func() {
 var _ = Service("calc", func() {
         Description("The calc service performs operations on numbers")
         // Method describes a service method (endpoint)
-        Method("add", func() {
+        Method("multiply", func() {
                 // Payload describes the method payload
                 // Here the payload is an object that consists of two fields
                 Payload(func() {
                         // Attribute describes an object field
                         Attribute("a", Int, "Left operand")
                         Attribute("b", Int, "Right operand")
-                        // Both attributes must be provided when invoking "add"
+                        // Both attributes must be provided when invoking "multiply"
                         Required("a", "b")
                 })
                 // Result describes the method result
@@ -162,7 +103,7 @@ var _ = Service("calc", func() {
                 HTTP(func() {
                         // Requests to the service consist of HTTP GET requests
                         // The payload fields are encoded as path parameters
-                        GET("/add/{a}/{b}")
+                        GET("/multiply/{a}/{b}")
                         // Responses use a "200 OK" HTTP status
                         // The result is encoded in the response body
                         Response(StatusOK)
@@ -172,8 +113,8 @@ var _ = Service("calc", func() {
 ```
 
 This file contains the design for a `calc` service which accepts HTTP GET
-requests to `/add/{a}/{b}` where `{a}` and `{b}` are placeholders for integer
-values. The API returns the sum of `a` and `b` in the HTTP response body.
+requests to `/multiply/{a}/{b}` where `{a}` and `{b}` are placeholders for integer
+values. The API returns the product of `a` multiplied by `b` in the HTTP response body.
 
 ### 2. Implement
 
@@ -219,7 +160,7 @@ gen
 * `http` contains the HTTP transport layer. This layer maps the service
   endpoints to HTTP handlers server side and HTTP client methods client side.
   The `http` directory also contains a complete
-  [OpenAPI 2.0](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/2.0.md)
+  [OpenAPI 3.0](https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.3.md)
   spec for the service.
 
 The `goa` tool can also generate example implementations for both the service
@@ -242,16 +183,16 @@ is intended to generate just that: an *example*, in particular it is not
 intended to be re-run each time the design changes (as opposed to the `gen`
 command which should be re-run each time the design changes).
 
-Let's implement our service by providing a proper implementation for the `add`
-method. Goa generated a payload struct for the `add` method that contains both
+Let's implement our service by providing a proper implementation for the `multiply`
+method. Goa generated a payload struct for the `multiply` method that contains both
 fields. Goa also generated the transport layer that takes care of decoding the
-request so all we have to do is to perform the actual sum. Edit the file
-`calc.go` and change the code of the `add` function as follows:
+request so all we have to do is to perform the actual multiplication. Edit the file
+`calc.go` and change the code of the `multiply` function as follows:
 
 ```go
-// Add returns the sum of attributes a and b of p.
-func (s *calcsrvc) Add(ctx context.Context, p *calc.AddPayload) (res int, err error) {
-        return p.A + p.B, nil
+// Multiply returns the multiplied value of attributes a and b of p.
+func (s *calcsrvc) Multiply(ctx context.Context, p *calc.MultiplyPayload) (res int, err error) {
+        return p.A * p.B, nil
 }
 ```
 
@@ -266,7 +207,7 @@ Now let's compile and run the service:
 cd cmd/calc
 go build
 ./calc
-[calcapi] 16:10:47 HTTP "Add" mounted on GET /add/{a}/{b}
+[calcapi] 16:10:47 HTTP "Multiply" mounted on GET /multiply/{a}/{b}
 [calcapi] 16:10:47 HTTP server listening on "localhost:8088"
 ```
 
@@ -280,7 +221,7 @@ go build
 and run it:
 
 ```bash
-./calc-cli calc add -a 1 -b 2
+./calc-cli calc multiply -a 1 -b 2
 3
 ```
 
@@ -293,13 +234,13 @@ The tool includes contextual help:
 Help is also available on each command:
 
 ``` bash
-./calc-cli calc add --help
+./calc-cli calc multiply --help
 ```
 
 Now let's see how robust our code is and try to use non integer values:
 
 ``` bash
-./calc-cli calc add -a 1 -b foo
+./calc-cli calc multiply -a 1 -b foo
 invalid value for b, must be INT
 run './calccli --help' for detailed usage.
 ```
@@ -310,19 +251,19 @@ incoming requests so that your code only has to deal with the business logic.
 
 ### 4. Document
 
-The `http` directory contains the OpenAPI 2.0 specification in both YAML and
-JSON format.
+The `http` directory contains OpenAPI 2.0 and 3.0 specifications in both YAML
+and JSON format.
 
 The specification can easily be served from the service itself using a file
 server. The [Files](http://godoc.org/goa.design/goa/dsl/http.go#Files) DSL
-function makes it possible to server static file. Edit the file
+function makes it possible to serve a static file. Edit the file
 `design/design.go` and add:
 
 ```go
 var _ = Service("openapi", func() {
-        // Serve the file with relative path ../../gen/http/openapi.json for
-        // requests sent to /swagger.json.
-        Files("/swagger.json", "../../gen/http/openapi.json")
+	// Serve the file gen/http/openapi3.json for requests sent to
+	// /openapi.json. The HTTP file system is created below.
+	Files("/openapi.json", "openapi3.json")
 })
 ```
 
@@ -341,12 +282,13 @@ and mount the handler by adding the following line in the same file and after
 the mux creation (e.g. one the line after the `// Configure the mux.` comment):
 
 ```go
-openapisvr.Mount(mux)
+svr := openapisvr.New(nil, mux, dec, enc, nil, nil, http.Dir("../../gen/http"))
+openapisvr.Mount(mux, svr)
 ```
 
 That's it! we now have a self-documenting service. Stop the running service
 with CTRL-C. Rebuild and re-run it then make requests to the newly added
-`/swagger.json` endpoint:
+`/openapi.json` endpoint:
 
 ``` bash
 ^C[calcapi] 16:17:37 exiting (interrupt)
@@ -359,22 +301,61 @@ go build
 In a different console:
 
 ``` bash
-curl localhost:8088/swagger.json
-{"swagger":"2.0","info":{"title":"Calculator Service","description":...
+curl localhost:8088/openapi.json
+{"openapi":"3.0.3","info":{"title":"Calculator Service","description":...
 ```
 
 ## Resources
 
-Consult the following resources to learn more about Goa.
-
 ### Docs
 
-See the [goa.design](https://goa.design) website.
+The [goa.design](https://goa.design) website provides a high level overview of
+Goa and the DSL.
+
+In particular the page
+[Implementing a Goa Service](https://goa.design/implement/implementing/)
+explains how to leverage the generated code to implement an HTTP or gRPC
+service.
+
+The [![DSL GoDoc](https://img.shields.io/badge/godoc-DSL-blue)](https://pkg.go.dev/goa.design/goa/v3@v3.5.5/dsl?tab=doc)
+contains a fully documented reference of all the DSL functions.
+
+### Getting Started Guides
+
+A couple of Getting Started guides produced by the community.
+
+Joseph Ocol from Pelmorex Corp. goes through a complete example writing a server
+and client service using both HTTP and gRPC transports.
+
+[![GOA Design Tutorial](https://tech.pelmorex.com/wp-content/uploads/2020/07/GOA-Design-Tutorial-Screencap-800x470.png)](https://vimeo.com/437928805)
+
+Gleidson Nascimento goes through how to create a complete service that using both
+[CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) and
+[JWT](https://jwt.io/) based authentication to secure access.
+
+[![API Development in Go Using Goa](https://bs-uploads.toptal.io/blackfish-uploads/uploaded_file/file/275966/image-1592349920607-734c25f64461bf3c482bac1d73c26432.png)](https://www.toptal.com/go/goa-api-development)
 
 ### Examples
 
 The [examples](https://github.com/goadesign/examples) directory
 contains simple examples illustrating basic concepts.
+
+### Troubleshooting
+
+Q: I'm seeing an error that says:
+
+> generated code expected `goa.design/goa/v3/codegen/generator` to be present in the vendor directory, see documentation for more details
+
+How do I fix this?
+
+A: If you are vendoring your dependencies Goa will not attempt to satisfy its
+dependencies by retrieving them with `go get`. If you see the above error message, it
+means that the `goa.design/goa/v3/codegen/generator` package is not included in your
+vendor directory.
+
+To fix, ensure that `goa.design/goa/v3/codegen/generator` is being imported somewhere in your project. This can be as a bare import (e.g. `import _ "goa.design/goa/v3/codegen/generator"`)
+in any file or you can use a dedicated `tools.go` file (see [Manage Go tools via Go modules](https://marcofranssen.nl/manage-go-tools-via-go-modules) and [golang/go/issues/25922](https://github.com/golang/go/issues/25922) for more details.) Finally, run `go mod vendor` to ensure
+the imported packages are properly vendored.
 
 ## Contributing
 

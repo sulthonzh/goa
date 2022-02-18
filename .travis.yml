@@ -1,7 +1,8 @@
 language: go
 dist: xenial
 go:
-- 1.12.x
+- 1.14.x
+if: branch = v2
 install:
 - export PATH=${PATH}:${HOME}/gopath/bin
 script:

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"go/build"
 	"os"
 	"reflect"
 	"testing"
@@ -59,7 +60,11 @@ func TestCommonPath(t *testing.T) {
 }
 
 func TestPkgImport(t *testing.T) {
-	cwd := os.Getenv("GOPATH") + "/src/goa.design/goa/codegen/service"
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		gopath = build.Default.GOPATH
+	}
+	cwd := gopath + "/src/goa.design/goa/codegen/service"
 	goModCwd := "/home/user/project/goa/codegen/service"
 	cases := []struct {
 		Name           string
@@ -241,6 +246,7 @@ func TestConvertFile(t *testing.T) {
 		{"create-object-extra", testdata.CreateObjectExtraDSL, 1, testdata.CreateObjectExtraCode},
 		{"create-external-convert", testdata.CreateExternalDSL, 0, testdata.CreateExternalConvert},
 		{"create-alias-convert", testdata.CreateAliasDSL, 0, testdata.CreateAliasConvert},
+		{"mixed-case-convert", testdata.MixedCaseDSL, 0, testdata.MixedCaseConvert},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
