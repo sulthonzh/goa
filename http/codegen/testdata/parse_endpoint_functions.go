@@ -8,7 +8,7 @@ func ParseEndpoint(
 	enc func(*http.Request) goahttp.Encoder,
 	dec func(*http.Response) goahttp.Decoder,
 	restore bool,
-) (goa.Endpoint, interface{}, error) {
+) (goa.Endpoint, any, error) {
 	var (
 		serviceMultiNoPayload1Flags = flag.NewFlagSet("service-multi-no-payload1", flag.ContinueOnError)
 
@@ -98,7 +98,7 @@ func ParseEndpoint(
 	}
 
 	var (
-		data     interface{}
+		data     any
 		endpoint goa.Endpoint
 		err      error
 	)
@@ -142,7 +142,7 @@ func ParseEndpoint(
 	enc func(*http.Request) goahttp.Encoder,
 	dec func(*http.Response) goahttp.Decoder,
 	restore bool,
-) (goa.Endpoint, interface{}, error) {
+) (goa.Endpoint, any, error) {
 	var (
 		serviceMultiSimple1Flags = flag.NewFlagSet("service-multi-simple1", flag.ContinueOnError)
 
@@ -234,7 +234,7 @@ func ParseEndpoint(
 	}
 
 	var (
-		data     interface{}
+		data     any
 		endpoint goa.Endpoint
 		err      error
 	)
@@ -278,7 +278,7 @@ func ParseEndpoint(
 	enc func(*http.Request) goahttp.Encoder,
 	dec func(*http.Response) goahttp.Decoder,
 	restore bool,
-) (goa.Endpoint, interface{}, error) {
+) (goa.Endpoint, any, error) {
 	var (
 		serviceMultiRequired1Flags = flag.NewFlagSet("service-multi-required1", flag.ContinueOnError)
 
@@ -364,7 +364,7 @@ func ParseEndpoint(
 	}
 
 	var (
-		data     interface{}
+		data     any
 		endpoint goa.Endpoint
 		err      error
 	)
@@ -405,7 +405,7 @@ func ParseEndpoint(
 	enc func(*http.Request) goahttp.Encoder,
 	dec func(*http.Response) goahttp.Decoder,
 	restore bool,
-) (goa.Endpoint, interface{}, error) {
+) (goa.Endpoint, any, error) {
 	var (
 		serviceMultiFlags = flag.NewFlagSet("service-multi", flag.ContinueOnError)
 
@@ -476,7 +476,7 @@ func ParseEndpoint(
 	}
 
 	var (
-		data     interface{}
+		data     any
 		endpoint goa.Endpoint
 		err      error
 	)
@@ -513,7 +513,7 @@ func ParseEndpoint(
 	dialer goahttp.Dialer,
 	streamingServiceAConfigurer *streamingserviceac.ConnConfigurer,
 	streamingServiceBConfigurer *streamingservicebc.ConnConfigurer,
-) (goa.Endpoint, interface{}, error) {
+) (goa.Endpoint, any, error) {
 	var (
 		streamingServiceAFlags = flag.NewFlagSet("streaming-service-a", flag.ContinueOnError)
 
@@ -591,7 +591,7 @@ func ParseEndpoint(
 	}
 
 	var (
-		data     interface{}
+		data     any
 		endpoint goa.Endpoint
 		err      error
 	)
@@ -740,16 +740,14 @@ func BuildMethodParamValidatePayload(serviceParamValidateMethodParamValidateA st
 	{
 		if serviceParamValidateMethodParamValidateA != "" {
 			var v int64
-			v, err = strconv.ParseInt(serviceParamValidateMethodParamValidateA, 10, 64)
+			v, err = strconv.ParseInt(serviceParamValidateMethodParamValidateA, 10, strconv.IntSize)
 			val := int(v)
 			a = &val
 			if err != nil {
 				return nil, fmt.Errorf("invalid value for a, must be INT")
 			}
-			if a != nil {
-				if *a < 1 {
-					err = goa.MergeErrors(err, goa.InvalidRangeError("a", *a, 1, true))
-				}
+			if *a < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("a", *a, 1, true))
 			}
 			if err != nil {
 				return nil, err
@@ -771,7 +769,7 @@ func ParseEndpoint(
 	enc func(*http.Request) goahttp.Encoder,
 	dec func(*http.Response) goahttp.Decoder,
 	restore bool,
-) (goa.Endpoint, interface{}, error) {
+) (goa.Endpoint, any, error) {
 	var (
 		serviceBodyPrimitiveBoolValidateFlags = flag.NewFlagSet("service-body-primitive-bool-validate", flag.ContinueOnError)
 
@@ -834,7 +832,7 @@ func ParseEndpoint(
 	}
 
 	var (
-		data     interface{}
+		data     any
 		endpoint goa.Endpoint
 		err      error
 	)
@@ -869,7 +867,7 @@ func ParseEndpoint(
 	enc func(*http.Request) goahttp.Encoder,
 	dec func(*http.Response) goahttp.Decoder,
 	restore bool,
-) (goa.Endpoint, interface{}, error) {
+) (goa.Endpoint, any, error) {
 	var (
 		serviceBodyPrimitiveArrayStringValidateFlags = flag.NewFlagSet("service-body-primitive-array-string-validate", flag.ContinueOnError)
 
@@ -932,7 +930,7 @@ func ParseEndpoint(
 	}
 
 	var (
-		data     interface{}
+		data     any
 		endpoint goa.Endpoint
 		err      error
 	)
@@ -1056,7 +1054,7 @@ func ParseEndpoint(
 	enc func(*http.Request) goahttp.Encoder,
 	dec func(*http.Response) goahttp.Decoder,
 	restore bool,
-) (goa.Endpoint, interface{}, error) {
+) (goa.Endpoint, any, error) {
 	var (
 		serviceMapQueryPrimitiveArrayFlags = flag.NewFlagSet("service-map-query-primitive-array", flag.ContinueOnError)
 
@@ -1119,7 +1117,7 @@ func ParseEndpoint(
 	}
 
 	var (
-		data     interface{}
+		data     any
 		endpoint goa.Endpoint
 		err      error
 	)
@@ -1221,7 +1219,7 @@ func BuildMethodQueryUIntPayload(serviceQueryUIntMethodQueryUIntQ string) (*serv
 	{
 		if serviceQueryUIntMethodQueryUIntQ != "" {
 			var v uint64
-			v, err = strconv.ParseUint(serviceQueryUIntMethodQueryUIntQ, 10, 64)
+			v, err = strconv.ParseUint(serviceQueryUIntMethodQueryUIntQ, 10, strconv.IntSize)
 			val := uint(v)
 			q = &val
 			if err != nil {
@@ -1260,7 +1258,7 @@ func BuildMethodQueryStringValidatePayload(serviceQueryStringValidateMethodQuery
 	{
 		q = serviceQueryStringValidateMethodQueryStringValidateQ
 		if !(q == "val") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("q", q, []interface{}{"val"}))
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("q", q, []any{"val"}))
 		}
 		if err != nil {
 			return nil, err
@@ -1324,7 +1322,7 @@ func BuildMethodAPayload(serviceWithParamsAndHeadersBlockMethodABody string, ser
 	var path uint
 	{
 		var v uint64
-		v, err = strconv.ParseUint(serviceWithParamsAndHeadersBlockMethodAPath, 10, 64)
+		v, err = strconv.ParseUint(serviceWithParamsAndHeadersBlockMethodAPath, 10, strconv.IntSize)
 		path = uint(v)
 		if err != nil {
 			return nil, fmt.Errorf("invalid value for path, must be UINT")
@@ -1334,7 +1332,7 @@ func BuildMethodAPayload(serviceWithParamsAndHeadersBlockMethodABody string, ser
 	{
 		if serviceWithParamsAndHeadersBlockMethodAOptional != "" {
 			var v int64
-			v, err = strconv.ParseInt(serviceWithParamsAndHeadersBlockMethodAOptional, 10, 64)
+			v, err = strconv.ParseInt(serviceWithParamsAndHeadersBlockMethodAOptional, 10, strconv.IntSize)
 			val := int(v)
 			optional = &val
 			if err != nil {
@@ -1372,6 +1370,87 @@ func BuildMethodAPayload(serviceWithParamsAndHeadersBlockMethodABody string, ser
 	v.OptionalButRequiredParam = &optionalButRequiredParam
 	v.Required = required
 	v.OptionalButRequiredHeader = &optionalButRequiredHeader
+
+	return v, nil
+}
+`
+
+var PayloadBodyCustomNameBuildCode = `// BuildMethodBodyCustomNamePayload builds the payload for the
+// ServiceBodyCustomName MethodBodyCustomName endpoint from CLI flags.
+func BuildMethodBodyCustomNamePayload(serviceBodyCustomNameMethodBodyCustomNameBody string) (*servicebodycustomname.MethodBodyCustomNamePayload, error) {
+	var err error
+	var body MethodBodyCustomNameRequestBody
+	{
+		err = json.Unmarshal([]byte(serviceBodyCustomNameMethodBodyCustomNameBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"b\": \"Doloribus qui quia.\"\n   }'")
+		}
+	}
+	v := &servicebodycustomname.MethodBodyCustomNamePayload{
+		Body: body.Body,
+	}
+
+	return v, nil
+}
+`
+
+var PayloadPathCustomNameBuildCode = `// BuildMethodPathCustomNamePayload builds the payload for the
+// ServicePathCustomName MethodPathCustomName endpoint from CLI flags.
+func BuildMethodPathCustomNamePayload(servicePathCustomNameMethodPathCustomNameP string) (*servicepathcustomname.MethodPathCustomNamePayload, error) {
+	var p string
+	{
+		p = servicePathCustomNameMethodPathCustomNameP
+	}
+	v := &servicepathcustomname.MethodPathCustomNamePayload{}
+	v.Path = p
+
+	return v, nil
+}
+`
+
+var PayloadQueryCustomNameBuildCode = `// BuildMethodQueryCustomNamePayload builds the payload for the
+// ServiceQueryCustomName MethodQueryCustomName endpoint from CLI flags.
+func BuildMethodQueryCustomNamePayload(serviceQueryCustomNameMethodQueryCustomNameQ string) (*servicequerycustomname.MethodQueryCustomNamePayload, error) {
+	var q *string
+	{
+		if serviceQueryCustomNameMethodQueryCustomNameQ != "" {
+			q = &serviceQueryCustomNameMethodQueryCustomNameQ
+		}
+	}
+	v := &servicequerycustomname.MethodQueryCustomNamePayload{}
+	v.Query = q
+
+	return v, nil
+}
+`
+
+var PayloadHeaderCustomNameBuildCode = `// BuildMethodHeaderCustomNamePayload builds the payload for the
+// ServiceHeaderCustomName MethodHeaderCustomName endpoint from CLI flags.
+func BuildMethodHeaderCustomNamePayload(serviceHeaderCustomNameMethodHeaderCustomNameH string) (*serviceheadercustomname.MethodHeaderCustomNamePayload, error) {
+	var h *string
+	{
+		if serviceHeaderCustomNameMethodHeaderCustomNameH != "" {
+			h = &serviceHeaderCustomNameMethodHeaderCustomNameH
+		}
+	}
+	v := &serviceheadercustomname.MethodHeaderCustomNamePayload{}
+	v.Header = h
+
+	return v, nil
+}
+`
+
+var PayloadCookieCustomNameBuildCode = `// BuildMethodCookieCustomNamePayload builds the payload for the
+// ServiceCookieCustomName MethodCookieCustomName endpoint from CLI flags.
+func BuildMethodCookieCustomNamePayload(serviceCookieCustomNameMethodCookieCustomNameC2 string) (*servicecookiecustomname.MethodCookieCustomNamePayload, error) {
+	var c2 *string
+	{
+		if serviceCookieCustomNameMethodCookieCustomNameC2 != "" {
+			c2 = &serviceCookieCustomNameMethodCookieCustomNameC2
+		}
+	}
+	v := &servicecookiecustomname.MethodCookieCustomNamePayload{}
+	v.Cookie = c2
 
 	return v, nil
 }

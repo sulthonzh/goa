@@ -127,19 +127,20 @@ func initWebSocketData(ed *EndpointData, e *expr.HTTPEndpointExpr, sd *ServiceDa
 							if ut, ok := body.(expr.UserType); ok {
 								if val := ut.Attribute().Validation; val != nil {
 									httpctx := httpContext("", sd.Scope, true, true)
-									svcode = codegen.RecursiveValidationCode(ut.Attribute(), httpctx, true, expr.IsAlias(ut), "body")
+									svcode = codegen.ValidationCode(ut.Attribute(), ut, httpctx, true, expr.IsAlias(ut), "body")
 								}
 							}
 						}
 						serverArgs = []*InitArgData{{
 							Ref: ref,
 							AttributeData: &AttributeData{
+								Name:     "payload",
 								VarName:  "body",
 								TypeName: sd.Scope.GoTypeName(e.StreamingBody),
 								TypeRef:  sd.Scope.GoTypeRef(e.StreamingBody),
 								Type:     e.StreamingBody.Type,
 								Required: true,
-								Example:  e.Body.Example(expr.Root.API.Random()),
+								Example:  e.Body.Example(expr.Root.API.ExampleGenerator),
 								Validate: svcode,
 							},
 						}}
@@ -230,18 +231,20 @@ func websocketServerFile(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File
 	}
 	svcName := data.Service.PathName
 	title := fmt.Sprintf("%s WebSocket server streaming", svc.Name())
+	imports := []*codegen.ImportSpec{
+		{Path: "context"},
+		{Path: "io"},
+		{Path: "net/http"},
+		{Path: "sync"},
+		{Path: "time"},
+		{Path: "github.com/gorilla/websocket"},
+		codegen.GoaImport(""),
+		codegen.GoaNamedImport("http", "goahttp"),
+		{Path: genpkg + "/" + svcName, Name: data.Service.PkgName},
+	}
+	imports = append(imports, data.Service.UserTypeImports...)
 	sections := []*codegen.SectionTemplate{
-		codegen.Header(title, "server", []*codegen.ImportSpec{
-			{Path: "context"},
-			{Path: "io"},
-			{Path: "net/http"},
-			{Path: "sync"},
-			{Path: "time"},
-			{Path: "github.com/gorilla/websocket"},
-			codegen.GoaImport(""),
-			codegen.GoaNamedImport("http", "goahttp"),
-			{Path: genpkg + "/" + svcName, Name: data.Service.PkgName},
-		}),
+		codegen.Header(title, "server", imports),
 	}
 	sections = append(sections, serverStructWSSections(data)...)
 	sections = append(sections, serverWSSections(data)...)
@@ -261,19 +264,21 @@ func websocketClientFile(genpkg string, svc *expr.HTTPServiceExpr) *codegen.File
 	}
 	svcName := data.Service.PathName
 	title := fmt.Sprintf("%s WebSocket client streaming", svc.Name())
+	imports := []*codegen.ImportSpec{
+		{Path: "context"},
+		{Path: "io"},
+		{Path: "net/http"},
+		{Path: "sync"},
+		{Path: "time"},
+		{Path: "github.com/gorilla/websocket"},
+		codegen.GoaImport(""),
+		codegen.GoaNamedImport("http", "goahttp"),
+		{Path: genpkg + "/" + svcName + "/" + "views", Name: data.Service.ViewsPkg},
+		{Path: genpkg + "/" + svcName, Name: data.Service.PkgName},
+	}
+	imports = append(imports, data.Service.UserTypeImports...)
 	sections := []*codegen.SectionTemplate{
-		codegen.Header(title, "client", []*codegen.ImportSpec{
-			{Path: "context"},
-			{Path: "io"},
-			{Path: "net/http"},
-			{Path: "sync"},
-			{Path: "time"},
-			{Path: "github.com/gorilla/websocket"},
-			codegen.GoaImport(""),
-			codegen.GoaNamedImport("http", "goahttp"),
-			{Path: genpkg + "/" + svcName + "/" + "views", Name: data.Service.ViewsPkg},
-			{Path: genpkg + "/" + svcName, Name: data.Service.PkgName},
-		}),
+		codegen.Header(title, "client", imports),
 	}
 	sections = append(sections, clientStructWSSections(data)...)
 	sections = append(sections, clientWSSections(data)...)
@@ -292,7 +297,7 @@ func serverStructWSSections(data *ServiceData) []*codegen.SectionTemplate {
 		Name:    "server-websocket-conn-configurer-struct",
 		Source:  webSocketConnConfigurerStructT,
 		Data:    data,
-		FuncMap: map[string]interface{}{"isWebSocketEndpoint": isWebSocketEndpoint},
+		FuncMap: map[string]any{"isWebSocketEndpoint": isWebSocketEndpoint},
 	})
 	for _, e := range data.Endpoints {
 		if e.ServerWebSocket != nil {
@@ -315,7 +320,7 @@ func serverWSSections(data *ServiceData) []*codegen.SectionTemplate {
 		Name:    "server-websocket-conn-configurer-struct-init",
 		Source:  webSocketConnConfigurerStructInitT,
 		Data:    data,
-		FuncMap: map[string]interface{}{"isWebSocketEndpoint": isWebSocketEndpoint},
+		FuncMap: map[string]any{"isWebSocketEndpoint": isWebSocketEndpoint},
 	})
 	for _, e := range data.Endpoints {
 		if e.ServerWebSocket != nil {
@@ -324,7 +329,7 @@ func serverWSSections(data *ServiceData) []*codegen.SectionTemplate {
 					Name:   "server-websocket-send",
 					Source: webSocketSendT,
 					Data:   e.ServerWebSocket,
-					FuncMap: map[string]interface{}{
+					FuncMap: map[string]any{
 						"upgradeParams":    upgradeParams,
 						"viewedServerBody": viewedServerBody,
 					},
@@ -336,7 +341,7 @@ func serverWSSections(data *ServiceData) []*codegen.SectionTemplate {
 					Name:    "server-websocket-recv",
 					Source:  webSocketRecvT,
 					Data:    e.ServerWebSocket,
-					FuncMap: map[string]interface{}{"upgradeParams": upgradeParams},
+					FuncMap: map[string]any{"upgradeParams": upgradeParams},
 				})
 			}
 			if e.ServerWebSocket.MustClose {
@@ -344,7 +349,7 @@ func serverWSSections(data *ServiceData) []*codegen.SectionTemplate {
 					Name:    "server-websocket-close",
 					Source:  webSocketCloseT,
 					Data:    e.ServerWebSocket,
-					FuncMap: map[string]interface{}{"upgradeParams": upgradeParams},
+					FuncMap: map[string]any{"upgradeParams": upgradeParams},
 				})
 			}
 			if e.Method.ViewedResult != nil && e.Method.ViewedResult.ViewName == "" {
@@ -367,7 +372,7 @@ func clientStructWSSections(data *ServiceData) []*codegen.SectionTemplate {
 		Name:    "client-websocket-conn-configurer-struct",
 		Source:  webSocketConnConfigurerStructT,
 		Data:    data,
-		FuncMap: map[string]interface{}{"isWebSocketEndpoint": isWebSocketEndpoint},
+		FuncMap: map[string]any{"isWebSocketEndpoint": isWebSocketEndpoint},
 	})
 	for _, e := range data.Endpoints {
 		if e.ClientWebSocket != nil {
@@ -389,7 +394,7 @@ func clientWSSections(data *ServiceData) []*codegen.SectionTemplate {
 		Name:    "client-websocket-conn-configurer-struct-init",
 		Source:  webSocketConnConfigurerStructInitT,
 		Data:    data,
-		FuncMap: map[string]interface{}{"isWebSocketEndpoint": isWebSocketEndpoint},
+		FuncMap: map[string]any{"isWebSocketEndpoint": isWebSocketEndpoint},
 	})
 	for _, e := range data.Endpoints {
 		if e.ClientWebSocket != nil {
@@ -398,7 +403,7 @@ func clientWSSections(data *ServiceData) []*codegen.SectionTemplate {
 					Name:    "client-websocket-recv",
 					Source:  webSocketRecvT,
 					Data:    e.ClientWebSocket,
-					FuncMap: map[string]interface{}{"upgradeParams": upgradeParams},
+					FuncMap: map[string]any{"upgradeParams": upgradeParams},
 				})
 			}
 			switch e.ClientWebSocket.Kind {
@@ -407,7 +412,7 @@ func clientWSSections(data *ServiceData) []*codegen.SectionTemplate {
 					Name:   "client-websocket-send",
 					Source: webSocketSendT,
 					Data:   e.ClientWebSocket,
-					FuncMap: map[string]interface{}{
+					FuncMap: map[string]any{
 						"upgradeParams":    upgradeParams,
 						"viewedServerBody": viewedServerBody,
 					},
@@ -418,7 +423,7 @@ func clientWSSections(data *ServiceData) []*codegen.SectionTemplate {
 					Name:    "client-websocket-close",
 					Source:  webSocketCloseT,
 					Data:    e.ClientWebSocket,
-					FuncMap: map[string]interface{}{"upgradeParams": upgradeParams},
+					FuncMap: map[string]any{"upgradeParams": upgradeParams},
 				})
 			}
 			if e.Method.ViewedResult != nil && e.Method.ViewedResult.ViewName == "" {
@@ -538,7 +543,7 @@ func (s *{{ .VarName }}) {{ .SendName }}(v {{ .SendTypeRef }}) error {
 					{{- $vsb := (viewedServerBody $.Response.ServerBody .Endpoint.Method.ViewedResult.ViewName) }}
 					body := {{ $vsb.Init.Name }}({{ range $vsb.Init.ServerArgs }}{{ .Ref }}, {{ end }})
 				{{- else }}
-					var body interface{}
+					var body any
 					switch s.view {
 					{{- range .Endpoint.Method.ViewedResult.Views }}
 						case {{ printf "%q" .Name }}{{ if eq .Name "default" }}, ""{{ end }}:

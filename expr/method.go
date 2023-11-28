@@ -106,6 +106,8 @@ func (m *MethodExpr) Validate() error {
 		requirements = m.Requirements
 	} else if len(m.Service.Requirements) > 0 {
 		requirements = m.Service.Requirements
+	} else if len(Root.API.Requirements) > 0 {
+		requirements = Root.API.Requirements
 	}
 	var (
 		hasBasicAuth bool
@@ -199,7 +201,7 @@ func (m *MethodExpr) Validate() error {
 			// presence of struct:error:name meta in the object type.
 			if i != j && e.Type == e2.Type && IsObject(e.Type) {
 				var found bool
-				walkAttribute(e.AttributeExpr, func(name string, att *AttributeExpr) error {
+				walkAttribute(e.AttributeExpr, func(_ string, att *AttributeExpr) error { // nolint: errcheck
 					if _, ok := att.Meta["struct:error:name"]; ok {
 						found = true
 						return fmt.Errorf("struct:error:name found: stop iteration")
@@ -207,7 +209,7 @@ func (m *MethodExpr) Validate() error {
 					return nil
 				})
 				if !found {
-					verr.Add(e, "type %q is used to define multiple errors and must identify the attribute containing error name. Use Meta with the key 'struct:error:name' on the error name attribute", e.AttributeExpr.Type.Name())
+					verr.Add(e, "type %q is used to define multiple errors and must identify the attribute containing the error name with ErrorName", e.AttributeExpr.Type.Name())
 					break
 				}
 			}
@@ -282,28 +284,44 @@ func (m *MethodExpr) Finalize() {
 			rt.Finalize()
 		}
 	}
+	for _, e := range m.Service.Errors {
+		found := false
+		for _, f := range m.Errors {
+			if e.Name == f.Name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.Errors = append(m.Errors, e)
+		}
+	}
 	for _, e := range m.Errors {
 		e.Finalize()
 	}
 
 	// Inherit security requirements
 	noreq := false
+loop:
 	for _, r := range m.Requirements {
 		// Handle special case of no security
 		for _, s := range r.Schemes {
 			if s.Kind == NoKind {
 				noreq = true
-				break
+				break loop
 			}
-		}
-		if noreq {
-			break
 		}
 	}
 	if noreq {
 		m.Requirements = nil
-	} else if len(m.Requirements) == 0 && len(m.Service.Requirements) > 0 {
-		m.Requirements = copyReqs(m.Service.Requirements)
+		return
+	}
+	if len(m.Requirements) == 0 {
+		if len(m.Service.Requirements) > 0 {
+			m.Requirements = copyReqs(m.Service.Requirements)
+		} else if len(Root.API.Requirements) > 0 {
+			m.Requirements = copyReqs(Root.API.Requirements)
+		}
 	}
 }
 

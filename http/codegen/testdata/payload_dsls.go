@@ -806,6 +806,21 @@ var PayloadQueryArrayAnyValidateDSL = func() {
 	})
 }
 
+var PayloadQueryArrayAliasDSL = func() {
+	var Alias = Type("Alias", String)
+	Service("ServiceQueryArrayAlias", func() {
+		Method("MethodQueryArrayAlias", func() {
+			Payload(func() {
+				Attribute("q", ArrayOf(Alias))
+			})
+			HTTP(func() {
+				GET("/")
+				Param("q")
+			})
+		})
+	})
+}
+
 var PayloadQueryMapStringStringDSL = func() {
 	Service("ServiceQueryMapStringString", func() {
 		Method("MethodQueryMapStringString", func() {
@@ -1439,6 +1454,23 @@ var PayloadPathStringDefaultDSL = func() {
 	})
 }
 
+var PayloadPathObjectDSL = func() {
+	Service("ServicePathObject", func() {
+		Method("MethodPathObject", func() {
+			Payload(func() {
+				Attribute("id")
+			})
+			HTTP(func() {
+				PUT("/{id}")
+				Params(func() {
+					Param("id")
+					Required("id")
+				})
+			})
+		})
+	})
+}
+
 var PayloadPathArrayStringDSL = func() {
 	Service("ServicePathArrayString", func() {
 		Method("MethodPathArrayString", func() {
@@ -2025,6 +2057,94 @@ var PayloadBodyObjectValidateDSL = func() {
 	})
 }
 
+var PayloadBodyUnionDSL = func() {
+	var Union = Type("Union", func() {
+		OneOf("Values", func() {
+			Attribute("String", String)
+			Attribute("Int", Int)
+		})
+	})
+	Service("ServiceBodyUnion", func() {
+		Method("MethodBodyUnion", func() {
+			Payload(Union)
+			HTTP(func() {
+				POST("/")
+			})
+		})
+	})
+}
+
+var PayloadBodyUnionValidateDSL = func() {
+	var UnionValidate = Type("UnionValidate", func() {
+		OneOf("Values", func() {
+			Attribute("String", String)
+			Attribute("Int", Int)
+		})
+	})
+	Service("ServiceBodyUnionValidate", func() {
+		Method("MethodBodyUnionValidate", func() {
+			Payload(func() {
+				Attribute("a", UnionValidate)
+				Required("a")
+			})
+			HTTP(func() {
+				POST("/")
+			})
+		})
+	})
+}
+
+var PayloadBodyUnionUserDSL = func() {
+	var SomeType = Type("SomeType", func() {
+		Attribute("a", String)
+	})
+	var SomeOtherType = Type("SomeOtherType", func() {
+		Attribute("b", String)
+	})
+	var Union = Type("UnionUser", func() {
+		OneOf("Values", func() {
+			Attribute("SomeType", SomeType)
+			Attribute("SomeOtherType", SomeOtherType)
+		})
+	})
+	Service("ServiceBodyUnionUser", func() {
+		Method("MethodBodyUnionUser", func() {
+			Payload(Union)
+			HTTP(func() {
+				POST("/")
+			})
+		})
+	})
+}
+
+var PayloadBodyUnionUserValidateDSL = func() {
+	var SomeType = Type("SomeType", func() {
+		Attribute("a", String)
+		Required("a")
+	})
+	var SomeOtherType = Type("SomeOtherType", func() {
+		Attribute("b", String)
+		Required("b")
+	})
+	var Union = Type("UnionUserValidate", func() {
+		OneOf("Values", func() {
+			Attribute("SomeType", SomeType)
+			Attribute("SomeOtherType", SomeOtherType)
+		})
+	})
+	Service("ServiceBodyUnionUserValidate", func() {
+		Method("MethodBodyUnionUserValidate", func() {
+			Payload(func() {
+				Attribute("a", Union)
+				Required("a")
+			})
+			HTTP(func() {
+				POST("/")
+			})
+		})
+	})
+}
+
 var PayloadBodyArrayStringDSL = func() {
 	Service("ServiceBodyArrayString", func() {
 		Method("MethodBodyArrayString", func() {
@@ -2389,6 +2509,53 @@ var PayloadBodyQueryUserValidateDSL = func() {
 	})
 	Service("ServiceBodyQueryUserValidate", func() {
 		Method("MethodBodyQueryUserValidate", func() {
+			Payload(PayloadType)
+			HTTP(func() {
+				POST("/")
+				Param("b")
+			})
+		})
+	})
+}
+
+var PayloadBodyQueryUserUnionDSL = func() {
+	var Union = Type("Union", func() {
+		OneOf("Values", func() {
+			Attribute("String", String)
+			Attribute("Int", Int)
+		})
+	})
+	var PayloadType = Type("PayloadType", func() {
+		Attribute("a", Union)
+		Attribute("b", String)
+	})
+	Service("ServiceBodyQueryUserUnion", func() {
+		Method("MethodBodyQueryUserUnion", func() {
+			Payload(PayloadType)
+			HTTP(func() {
+				POST("/")
+				Param("b")
+			})
+		})
+	})
+}
+
+var PayloadBodyQueryUserUnionValidateDSL = func() {
+	var Union = Type("Union", func() {
+		OneOf("Values", func() {
+			Attribute("String", String)
+			Attribute("Int", Int)
+		})
+	})
+	var PayloadType = Type("PayloadType", func() {
+		Attribute("a", Union)
+		Attribute("b", String, func() {
+			Pattern("patternb")
+		})
+		Required("a", "b")
+	})
+	Service("ServiceBodyQueryUserUnionValidate", func() {
+		Method("MethodBodyQueryUserUnionValidate", func() {
 			Payload(PayloadType)
 			HTTP(func() {
 				POST("/")
@@ -3209,6 +3376,209 @@ var QueryArrayNestedAliasValidateDSL = func() {
 				Params(func() {
 					Param("array")
 				})
+			})
+		})
+	})
+}
+
+var PayloadPathCustomFloat32DSL = func() {
+	Service("ServicePathCustomFloat32", func() {
+		Method("MethodPathCustomFloat32", func() {
+			Payload(func() {
+				Attribute("p", Float32, func() {
+					Meta("struct:field:type", "hide.Float32", "github.com/c2h5oh/hide")
+				})
+			})
+			HTTP(func() {
+				GET("/{p}")
+			})
+		})
+	})
+}
+
+var PayloadPathCustomFloat64DSL = func() {
+	Service("ServicePathCustomFloat64", func() {
+		Method("MethodPathCustomFloat64", func() {
+			Payload(func() {
+				Attribute("p", Float64, func() {
+					Meta("struct:field:type", "hide.Float64", "github.com/c2h5oh/hide")
+				})
+			})
+			HTTP(func() {
+				GET("/{p}")
+			})
+		})
+	})
+}
+
+var PayloadPathCustomIntDSL = func() {
+	Service("ServicePathCustomInt", func() {
+		Method("MethodPathCustomInt", func() {
+			Payload(func() {
+				Attribute("p", Int, func() {
+					Meta("struct:field:type", "hide.Int", "github.com/c2h5oh/hide")
+				})
+			})
+			HTTP(func() {
+				GET("/{p}")
+			})
+		})
+	})
+}
+
+var PayloadPathCustomInt32DSL = func() {
+	Service("ServicePathCustomInt32", func() {
+		Method("MethodPathCustomInt32", func() {
+			Payload(func() {
+				Attribute("p", Int32, func() {
+					Meta("struct:field:type", "hide.Int32", "github.com/c2h5oh/hide")
+				})
+			})
+			HTTP(func() {
+				GET("/{p}")
+			})
+		})
+	})
+}
+
+var PayloadPathCustomInt64DSL = func() {
+	Service("ServicePathCustomInt64", func() {
+		Method("MethodPathCustomInt64", func() {
+			Payload(func() {
+				Attribute("p", Int64, func() {
+					Meta("struct:field:type", "hide.Int64", "github.com/c2h5oh/hide")
+				})
+			})
+			HTTP(func() {
+				GET("/{p}")
+			})
+		})
+	})
+}
+
+var PayloadPathCustomUIntDSL = func() {
+	Service("ServicePathCustomUInt", func() {
+		Method("MethodPathCustomUInt", func() {
+			Payload(func() {
+				Attribute("p", UInt, func() {
+					Meta("struct:field:type", "hide.Uint", "github.com/c2h5oh/hide")
+				})
+			})
+			HTTP(func() {
+				GET("/{p}")
+			})
+		})
+	})
+}
+
+var PayloadPathCustomUInt32DSL = func() {
+	Service("ServicePathCustomUInt32", func() {
+		Method("MethodPathCustomUInt32", func() {
+			Payload(func() {
+				Attribute("p", UInt32, func() {
+					Meta("struct:field:type", "hide.Uint32", "github.com/c2h5oh/hide")
+				})
+			})
+			HTTP(func() {
+				GET("/{p}")
+			})
+		})
+	})
+}
+
+var PayloadPathCustomUInt64DSL = func() {
+	Service("ServicePathCustomUInt64", func() {
+		Method("MethodPathCustomUInt64", func() {
+			Payload(func() {
+				Attribute("p", UInt64, func() {
+					Meta("struct:field:type", "hide.Uint64", "github.com/c2h5oh/hide")
+				})
+			})
+			HTTP(func() {
+				GET("/{p}")
+			})
+		})
+	})
+}
+
+var PayloadBodyCustomNameDSL = func() {
+	Service("ServiceBodyCustomName", func() {
+		Method("MethodBodyCustomName", func() {
+			Payload(func() {
+				Attribute("b", String, func() {
+					Meta("struct:field:name", "Body")
+				})
+			})
+			HTTP(func() {
+				GET("/")
+			})
+		})
+	})
+}
+
+var PayloadPathCustomNameDSL = func() {
+	Service("ServicePathCustomName", func() {
+		Method("MethodPathCustomName", func() {
+			Payload(func() {
+				Attribute("p", String, func() {
+					Meta("struct:field:name", "Path")
+				})
+				Required("p")
+			})
+			HTTP(func() {
+				GET("/{p}")
+			})
+		})
+	})
+}
+
+var PayloadQueryCustomNameDSL = func() {
+	Service("ServiceQueryCustomName", func() {
+		Method("MethodQueryCustomName", func() {
+			Payload(func() {
+				Attribute("q", String, func() {
+					Meta("struct:field:name", "Query")
+				})
+			})
+			HTTP(func() {
+				GET("/")
+				Params(func() {
+					Param("q")
+				})
+			})
+		})
+	})
+}
+
+var PayloadHeaderCustomNameDSL = func() {
+	Service("ServiceHeaderCustomName", func() {
+		Method("MethodHeaderCustomName", func() {
+			Payload(func() {
+				Attribute("h", String, func() {
+					Meta("struct:field:name", "Header")
+				})
+			})
+			HTTP(func() {
+				GET("/")
+				Headers(func() {
+					Header("h")
+				})
+			})
+		})
+	})
+}
+
+var PayloadCookieCustomNameDSL = func() {
+	Service("ServiceCookieCustomName", func() {
+		Method("MethodCookieCustomName", func() {
+			Payload(func() {
+				Attribute("c", String, func() {
+					Meta("struct:field:name", "Cookie")
+				})
+			})
+			HTTP(func() {
+				GET("/")
+				Cookie("c")
 			})
 		})
 	})

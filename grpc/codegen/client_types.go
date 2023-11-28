@@ -11,8 +11,8 @@ import (
 // ClientTypeFiles returns the types file for every gRPC service that contain
 // constructors to transform:
 //
-//   * service payload types into protocol buffer request message types
-//   * protocol buffer response message types into service result types
+//   - service payload types into protocol buffer request message types
+//   - protocol buffer response message types into service result types
 func ClientTypeFiles(genpkg string, root *expr.RootExpr) []*codegen.File {
 	fw := make([]*codegen.File, len(root.API.GRPC.Services))
 	seen := make(map[string]struct{})
@@ -28,17 +28,23 @@ func ClientTypeFiles(genpkg string, root *expr.RootExpr) []*codegen.File {
 //
 // seen keeps track of the constructor names that have already been generated
 // to prevent duplicate code generation.
-func clientType(genpkg string, svc *expr.GRPCServiceExpr, seen map[string]struct{}) *codegen.File {
+func clientType(genpkg string, svc *expr.GRPCServiceExpr, _ map[string]struct{}) *codegen.File {
 	var (
 		initData []*InitData
 
 		sd = GRPCServices.Get(svc.Name())
 	)
 	{
+		seen := make(map[string]struct{})
 		collect := func(c *ConvertData) {
-			if c.Init != nil {
-				initData = append(initData, c.Init)
+			if c.Init == nil {
+				return
 			}
+			if _, ok := seen[c.Init.Name]; ok {
+				return
+			}
+			seen[c.Init.Name] = struct{}{}
+			initData = append(initData, c.Init)
 		}
 		for _, a := range svc.GRPCEndpoints {
 			ed := sd.Endpoint(a.Name())
@@ -71,21 +77,30 @@ func clientType(genpkg string, svc *expr.GRPCServiceExpr, seen map[string]struct
 	{
 		svcName := sd.Service.PathName
 		fpath = filepath.Join(codegen.Gendir, "grpc", svcName, "client", "types.go")
-		sections = []*codegen.SectionTemplate{
-			codegen.Header(svc.Name()+" gRPC client types", "client",
-				[]*codegen.ImportSpec{
-					{Path: "unicode/utf8"},
-					codegen.GoaImport(""),
-					{Path: path.Join(genpkg, svcName), Name: sd.Service.PkgName},
-					{Path: path.Join(genpkg, svcName, "views"), Name: sd.Service.ViewsPkg},
-					{Path: path.Join(genpkg, "grpc", svcName, pbPkgName), Name: sd.PkgName},
-				}),
+		imports := []*codegen.ImportSpec{
+			{Path: "unicode/utf8"},
+			codegen.GoaImport(""),
+			{Path: path.Join(genpkg, svcName), Name: sd.Service.PkgName},
+			{Path: path.Join(genpkg, svcName, "views"), Name: sd.Service.ViewsPkg},
+			{Path: path.Join(genpkg, "grpc", svcName, pbPkgName), Name: sd.PkgName},
 		}
+		imports = append(imports, sd.Service.UserTypeImports...)
+		imports = append(imports, sd.Service.ProtoImports...)
+		sections = []*codegen.SectionTemplate{codegen.Header(svc.Name()+" gRPC client types", "client", imports)}
 		for _, init := range initData {
 			sections = append(sections, &codegen.SectionTemplate{
 				Name:   "client-type-init",
 				Source: typeInitT,
 				Data:   init,
+				FuncMap: map[string]any{
+					"isAlias": expr.IsAlias,
+					"fullName": func(dt expr.DataType) string {
+						if loc := codegen.UserTypeLocation(dt); loc != nil {
+							return loc.PackageName() + "." + dt.Name()
+						}
+						return dt.Name()
+					},
+				},
 			})
 		}
 		for _, data := range sd.validations {

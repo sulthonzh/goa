@@ -6,7 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 	"text/template"
@@ -14,7 +14,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi2"
 	"goa.design/goa/v3/codegen"
 	httpgen "goa.design/goa/v3/http/codegen"
-	openapi "goa.design/goa/v3/http/codegen/openapi"
+	"goa.design/goa/v3/http/codegen/openapi"
 	openapiv2 "goa.design/goa/v3/http/codegen/openapi/v2"
 	"goa.design/goa/v3/http/codegen/testdata"
 )
@@ -40,6 +40,9 @@ func TestSections(t *testing.T) {
 		{"with-spaces", testdata.WithSpacesDSL},
 		{"with-map", testdata.WithMapDSL},
 		{"path-with-wildcards", testdata.PathWithWildcardDSL},
+		{"typename", testdata.TypenameDSL},
+		{"not-generate-server", testdata.NotGenerateServerDSL},
+		{"not-generate-host", testdata.NotGenerateHostDSL},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
@@ -76,13 +79,13 @@ func TestSections(t *testing.T) {
 
 					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
 					if *update {
-						if err := ioutil.WriteFile(golden, buf.Bytes(), 0644); err != nil {
+						if err := os.WriteFile(golden, buf.Bytes(), 0644); err != nil {
 							t.Fatalf("failed to update golden file: %s", err)
 						}
 					}
 
-					want, err := ioutil.ReadFile(golden)
-					want = bytes.Replace(want, []byte{'\r', '\n'}, []byte{'\n'}, -1)
+					want, err := os.ReadFile(golden)
+					want = bytes.ReplaceAll(want, []byte{'\r', '\n'}, []byte{'\n'})
 					if err != nil {
 						t.Fatalf("failed to read golden file: %s", err)
 					}
@@ -105,7 +108,7 @@ func TestSections(t *testing.T) {
 }
 
 func prettifyJSON(t *testing.T, b []byte) string {
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(b, &v); err != nil {
 		t.Errorf("failed to unmarshal swagger JSON: %s", err)
 	}
@@ -166,13 +169,13 @@ func TestValidations(t *testing.T) {
 
 					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
 					if *update {
-						if err := ioutil.WriteFile(golden, buf.Bytes(), 0644); err != nil {
+						if err := os.WriteFile(golden, buf.Bytes(), 0644); err != nil {
 							t.Fatalf("failed to update golden file: %s", err)
 						}
 					}
 
-					want, err := ioutil.ReadFile(golden)
-					want = bytes.Replace(want, []byte{'\r', '\n'}, []byte{'\n'}, -1)
+					want, err := os.ReadFile(golden)
+					want = bytes.ReplaceAll(want, []byte{'\r', '\n'}, []byte{'\n'})
 					if err != nil {
 						t.Fatalf("failed to read golden file: %s", err)
 					}
@@ -233,13 +236,13 @@ func TestExtensions(t *testing.T) {
 
 					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
 					if *update {
-						if err := ioutil.WriteFile(golden, buf.Bytes(), 0644); err != nil {
+						if err := os.WriteFile(golden, buf.Bytes(), 0644); err != nil {
 							t.Fatalf("failed to update golden file: %s", err)
 						}
 					}
 
-					want, err := ioutil.ReadFile(golden)
-					want = bytes.Replace(want, []byte{'\r', '\n'}, []byte{'\n'}, -1)
+					want, err := os.ReadFile(golden)
+					want = bytes.ReplaceAll(want, []byte{'\r', '\n'}, []byte{'\n'})
 					if err != nil {
 						t.Fatalf("failed to read golden file: %s", err)
 					}
@@ -258,7 +261,7 @@ func validateSwagger(b []byte) error {
 	if err := doc.UnmarshalJSON(b); err != nil {
 		return err
 	}
-	if doc == nil {
+	if doc.Swagger == "" {
 		return errors.New("nil swagger")
 	}
 	return nil

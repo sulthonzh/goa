@@ -124,6 +124,7 @@ func TestAttributeExprValidate(t *testing.T) {
 		errRequiredFieldNotExist = fmt.Errorf(`%srequired field %q does not exist in type %s`, normalizedCtx, "foo", fieldNotExistType.Name())
 		errViewButNotAResultType = fmt.Errorf("%s uses view %q but %q is not a result type", normalizedCtx, metadata["view"][0], notAResultType.Name())
 		errTypeNotDefineView     = fmt.Errorf("%s: type %q does not define view %q", normalizedCtx, viewNotDefinedTypeName, "foo")
+		errConflictingTypes      = fmt.Errorf("type \"%s\" has conflicting packages %s and %s", "SecondType", "types2", "types")
 	)
 	cases := map[string]struct {
 		typ        DataType
@@ -283,6 +284,124 @@ func TestAttributeExprValidate(t *testing.T) {
 			},
 			metadata: metadata,
 			expected: &eval.ValidationErrors{Errors: []error{errTypeNotDefineView}},
+		},
+		"custom package in parent type": {
+			typ: &UserTypeExpr{
+				TypeName: "FirstType",
+				AttributeExpr: &AttributeExpr{
+					Meta: MetaExpr{"struct:pkg:path": []string{"types"}},
+					Type: &Object{
+						&NamedAttributeExpr{
+							Name: "thing",
+							Attribute: &AttributeExpr{
+								Type: &UserTypeExpr{
+									AttributeExpr: &AttributeExpr{
+										Type: &Object{
+											&NamedAttributeExpr{
+												Name: "Description",
+												Attribute: &AttributeExpr{
+													Type: String,
+												},
+											},
+										},
+									},
+									TypeName: "SecondType",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: &eval.ValidationErrors{Errors: []error{}},
+		},
+		"custom packages in child type": {
+			typ: &UserTypeExpr{
+				TypeName: "FirstType",
+				AttributeExpr: &AttributeExpr{
+					Type: &Object{
+						&NamedAttributeExpr{
+							Name: "thing",
+							Attribute: &AttributeExpr{
+								Type: &UserTypeExpr{
+									AttributeExpr: &AttributeExpr{
+										Meta: MetaExpr{"struct:pkg:path": []string{"types"}},
+										Type: &Object{
+											&NamedAttributeExpr{
+												Name: "Description",
+												Attribute: &AttributeExpr{
+													Type: String,
+												},
+											},
+										},
+									},
+									TypeName: "SecondType",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: &eval.ValidationErrors{Errors: []error{}},
+		},
+		"matching custom packages between sub-type and parent": {
+			typ: &UserTypeExpr{
+				TypeName: "FirstType",
+				AttributeExpr: &AttributeExpr{
+					Meta: MetaExpr{"struct:pkg:path": []string{"types"}},
+					Type: &Object{
+						&NamedAttributeExpr{
+							Name: "thing",
+							Attribute: &AttributeExpr{
+								Type: &UserTypeExpr{
+									AttributeExpr: &AttributeExpr{
+										Meta: MetaExpr{"struct:pkg:path": []string{"types"}},
+										Type: &Object{
+											&NamedAttributeExpr{
+												Name: "Description",
+												Attribute: &AttributeExpr{
+													Type: String,
+												},
+											},
+										},
+									},
+									TypeName: "SecondType",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: &eval.ValidationErrors{Errors: []error{}},
+		},
+		"conflicting custom packages between sub-type and parent": {
+			typ: &UserTypeExpr{
+				TypeName: "FirstType",
+				AttributeExpr: &AttributeExpr{
+					Meta: MetaExpr{"struct:pkg:path": []string{"types"}},
+					Type: &Object{
+						&NamedAttributeExpr{
+							Name: "thing",
+							Attribute: &AttributeExpr{
+								Type: &UserTypeExpr{
+									AttributeExpr: &AttributeExpr{
+										Meta: MetaExpr{"struct:pkg:path": []string{"types2"}},
+										Type: &Object{
+											&NamedAttributeExpr{
+												Name: "Description",
+												Attribute: &AttributeExpr{
+													Type: String,
+												},
+											},
+										},
+									},
+									TypeName: "SecondType",
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: &eval.ValidationErrors{Errors: []error{errConflictingTypes}},
 		},
 	}
 
@@ -719,7 +838,7 @@ func TestAttributeExprHasDefaultValue(t *testing.T) {
 
 func TestValidationExprHasRequiredOnly(t *testing.T) {
 	var (
-		values           = []interface{}{"foo"}
+		values           = []any{"foo"}
 		pattern          = "^foo$"
 		exclusiveMinimum = 1.1
 		minimum          = 1.1
@@ -729,7 +848,7 @@ func TestValidationExprHasRequiredOnly(t *testing.T) {
 		maxLength        = 3
 	)
 	cases := map[string]struct {
-		values           []interface{}
+		values           []any
 		format           ValidationFormat
 		pattern          string
 		exclusiveMinimum *float64
@@ -824,4 +943,45 @@ func TestAttributeExprEvalName(t *testing.T) {
 		}
 	}
 
+}
+
+func TestAttributeExprValidationValidate(t *testing.T) {
+	var (
+		max       = 1.0
+		exclMax   = 2.0
+		min       = 3.0
+		ExclMin   = 4.0
+		MaxLength = 5
+		MinLength = 6
+		parent    = &UserTypeExpr{
+			AttributeExpr: &AttributeExpr{Type: String},
+			TypeName:      "Parent",
+		}
+	)
+	cases := map[string]struct {
+		min, max, exclMin, exclMax *float64
+		minLen, maxLen             *int
+		expected                   string
+	}{
+		"min and max":         {min: &min, max: &max, expected: "attribute: minimum is greater than maximum"},
+		"min and exclMax":     {min: &min, exclMax: &exclMax, expected: "attribute: minimum is greater than or equal to exclusive maximum"},
+		"exclMin and max":     {exclMin: &ExclMin, max: &max, expected: "attribute: exclusive minimum is greater than or equal to maximum"},
+		"exclMin and exclMax": {exclMin: &ExclMin, exclMax: &exclMax, expected: "attribute: exclusive minimum is greater than exclusive maximum"},
+		"max and exclMax":     {max: &max, exclMax: &exclMax, expected: "attribute: both maximum and exclusive maximum are defined"},
+		"min and exclMin":     {min: &min, exclMin: &ExclMin, expected: "attribute: both minimum and exclusive minimum are defined"},
+		"minLen and maxLen":   {minLen: &MinLength, maxLen: &MaxLength, expected: "attribute: min length is greater than max length"},
+	}
+	for k, tc := range cases {
+		validation := &ValidationExpr{
+			Minimum:          tc.min,
+			Maximum:          tc.max,
+			ExclusiveMinimum: tc.exclMin,
+			ExclusiveMaximum: tc.exclMax,
+			MinLength:        tc.minLen,
+			MaxLength:        tc.maxLen,
+		}
+		if actual := validation.Validate("", parent); actual.Error() != tc.expected {
+			t.Errorf("%s: got %#v, expected %#v", k, actual.Error(), tc.expected)
+		}
+	}
 }

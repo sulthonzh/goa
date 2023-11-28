@@ -25,6 +25,9 @@ func NewV2(root *expr.RootExpr, h *expr.HostExpr) (*V2, error) {
 		return nil, fmt.Errorf("failed to parse server URL: %s", err)
 	}
 	host := u.Host
+	if !mustGenerate(root.API.Servers[0].Meta) || !mustGenerate(h.Meta) {
+		host = ""
+	}
 
 	basePath := root.API.HTTP.Path
 	if hasAbsoluteRoutes(root) {
@@ -51,7 +54,7 @@ func NewV2(root *expr.RootExpr, h *expr.HostExpr) (*V2, error) {
 		},
 		Host:                host,
 		BasePath:            basePath,
-		Paths:               make(map[string]interface{}),
+		Paths:               make(map[string]any),
 		Consumes:            root.API.HTTP.Consumes,
 		Produces:            root.API.HTTP.Produces,
 		Parameters:          paramMap,
@@ -118,10 +121,12 @@ func defaultURI(h *expr.HostExpr) string {
 // mustGenerate returns true if the meta indicates that a OpenAPI specification should be
 // generated, false otherwise.
 func mustGenerate(meta expr.MetaExpr) bool {
-	if m, ok := meta["swagger:generate"]; ok {
-		if len(m) > 0 && m[0] == "false" {
-			return false
-		}
+	m, ok := meta.Last("openapi:generate")
+	if !ok {
+		m, ok = meta.Last("swagger:generate")
+	}
+	if ok && m == "false" {
+		return false
 	}
 	return true
 }
@@ -129,7 +134,8 @@ func mustGenerate(meta expr.MetaExpr) bool {
 // addScopeDescription generates and adds required scopes to the scheme's description.
 func addScopeDescription(scopes []*expr.ScopeExpr, sd *SecurityDefinition) {
 	// Generate scopes to add to description
-	lines := []string{}
+	var lines []string
+
 	for _, scope := range scopes {
 		lines = append(lines, fmt.Sprintf("  * `%s`: %s", scope.Name, scope.Description))
 	}
@@ -243,12 +249,12 @@ func hasAbsoluteRoutes(root *expr.RootExpr) bool {
 
 func summaryFromExpr(name string, e *expr.HTTPEndpointExpr) string {
 	for n, mdata := range e.Meta {
-		if n == "swagger:summary" && len(mdata) > 0 {
+		if (n == "openapi:summary" || n == "swagger:summary") && len(mdata) > 0 {
 			return mdata[0]
 		}
 	}
 	for n, mdata := range e.MethodExpr.Meta {
-		if n == "swagger:summary" && len(mdata) > 0 {
+		if (n == "openapi:summary" || n == "swagger:summary") && len(mdata) > 0 {
 			return mdata[0]
 		}
 	}
@@ -257,7 +263,7 @@ func summaryFromExpr(name string, e *expr.HTTPEndpointExpr) string {
 
 func summaryFromMeta(name string, meta expr.MetaExpr) string {
 	for n, mdata := range meta {
-		if n == "swagger:summary" && len(mdata) > 0 {
+		if (n == "openapi:summary" || n == "swagger:summary") && len(mdata) > 0 {
 			return mdata[0]
 		}
 	}
@@ -272,7 +278,7 @@ func paramsFromExpr(params *expr.MappedAttributeExpr, path string) []*Parameter 
 		res       []*Parameter
 		wildcards = expr.ExtractHTTPWildcards(path)
 	)
-	codegen.WalkMappedAttr(params, func(n, pn string, required bool, at *expr.AttributeExpr) error {
+	codegen.WalkMappedAttr(params, func(n, pn string, required bool, at *expr.AttributeExpr) error { // nolint: errcheck
 		in := "query"
 		for _, w := range wildcards {
 			if n == w {
@@ -289,7 +295,8 @@ func paramsFromExpr(params *expr.MappedAttributeExpr, path string) []*Parameter 
 }
 
 func paramsFromHeaders(endpoint *expr.HTTPEndpointExpr) []*Parameter {
-	params := []*Parameter{}
+	var params []*Parameter
+
 	var (
 		rma = endpoint.Service.Params
 		ma  = endpoint.Headers
@@ -370,9 +377,9 @@ func paramFor(at *expr.AttributeExpr, name, in string, required bool) *Parameter
 
 func itemsFromExpr(at *expr.AttributeExpr) *Items {
 	items := &Items{Type: at.Type.Name()}
-	switch actual := at.Type.(type) {
-	case expr.Primitive:
-		switch actual.Kind() {
+	p, ok := at.Type.(expr.Primitive)
+	if ok {
+		switch p.Kind() {
 		case expr.IntKind, expr.Int64Kind, expr.UIntKind, expr.UInt64Kind, expr.Int32Kind, expr.UInt32Kind:
 			items.Type = "integer"
 		case expr.Float32Kind, expr.Float64Kind:
@@ -388,7 +395,7 @@ func itemsFromExpr(at *expr.AttributeExpr) *Items {
 	return items
 }
 
-func responseSpecFromExpr(s *V2, root *expr.RootExpr, r *expr.HTTPResponseExpr, typeNamePrefix string) *Response {
+func responseSpecFromExpr(_ *V2, root *expr.RootExpr, r *expr.HTTPResponseExpr, typeNamePrefix string) *Response {
 	var schema *openapi.Schema
 	if mt, ok := r.Body.Type.(*expr.ResultTypeExpr); ok {
 		view := expr.DefaultView
@@ -421,7 +428,7 @@ func headersFromExpr(headers *expr.MappedAttributeExpr) map[string]*Header {
 		return nil
 	}
 	res := make(map[string]*Header)
-	codegen.WalkMappedAttr(headers, func(_, n string, required bool, at *expr.AttributeExpr) error {
+	codegen.WalkMappedAttr(headers, func(_, n string, _ bool, at *expr.AttributeExpr) error { // nolint: errcheck
 		header := &Header{
 			Default:     at.DefaultValue,
 			Description: at.Description,
@@ -472,7 +479,7 @@ func buildPathFromFileServer(s *V2, root *expr.RootExpr, fs *expr.HTTPFileServer
 			}
 		}
 
-		tagNames := openapi.TagNamesFromExpr(fs.Service.Meta, fs.Meta)
+		tagNames := openapi.TagNamesFromExpr(fs.Meta)
 		if len(tagNames) == 0 {
 			// By default tag with service name
 			tagNames = []string{fs.Service.Name()}
@@ -493,7 +500,7 @@ func buildPathFromFileServer(s *V2, root *expr.RootExpr, fs *expr.HTTPFileServer
 		if key == "" {
 			key = "/"
 		}
-		var path interface{}
+		var path any
 		var ok bool
 		if path, ok = s.Paths[key]; !ok {
 			path = new(Path)
@@ -508,7 +515,7 @@ func buildPathFromFileServer(s *V2, root *expr.RootExpr, fs *expr.HTTPFileServer
 func buildPathFromExpr(s *V2, root *expr.RootExpr, h *expr.HostExpr, route *expr.RouteExpr, basePath string) {
 	endpoint := route.Endpoint
 
-	tagNames := openapi.TagNamesFromExpr(endpoint.Service.Meta, endpoint.Meta)
+	tagNames := openapi.TagNamesFromExpr(endpoint.Meta)
 	if len(tagNames) == 0 {
 		// By default tag with service name
 		tagNames = []string{route.Endpoint.Service.Name()}
@@ -519,7 +526,8 @@ func buildPathFromExpr(s *V2, root *expr.RootExpr, h *expr.HostExpr, route *expr
 		key = expr.HTTPWildcardRegex.ReplaceAllString(key, "/{$1}")
 		params := paramsFromExpr(endpoint.Params, key)
 		params = append(params, paramsFromHeaders(endpoint)...)
-		produces := []string{}
+		var produces []string
+
 		responses := make(map[string]*Response, len(endpoint.Responses))
 		for _, r := range endpoint.Responses {
 			if endpoint.MethodExpr.IsStreaming() {
@@ -661,7 +669,7 @@ func buildPathFromExpr(s *V2, root *expr.RootExpr, h *expr.HostExpr, route *expr
 		if bp != "/" {
 			key = strings.TrimPrefix(key, bp)
 		}
-		var path interface{}
+		var path any
 		var ok bool
 		if path, ok = s.Paths[key]; !ok {
 			path = new(Path)
@@ -688,7 +696,7 @@ func buildPathFromExpr(s *V2, root *expr.RootExpr, h *expr.HostExpr, route *expr
 	}
 }
 
-func initEnumValidation(def interface{}, values []interface{}) {
+func initEnumValidation(def any, values []any) {
 	switch actual := def.(type) {
 	case *Parameter:
 		actual.Enum = values
@@ -699,7 +707,7 @@ func initEnumValidation(def interface{}, values []interface{}) {
 	}
 }
 
-func initFormatValidation(def interface{}, format string) {
+func initFormatValidation(def any, format string) {
 	switch actual := def.(type) {
 	case *Parameter:
 		actual.Format = format
@@ -710,7 +718,7 @@ func initFormatValidation(def interface{}, format string) {
 	}
 }
 
-func initPatternValidation(def interface{}, pattern string) {
+func initPatternValidation(def any, pattern string) {
 	switch actual := def.(type) {
 	case *Parameter:
 		actual.Pattern = pattern
@@ -721,7 +729,7 @@ func initPatternValidation(def interface{}, pattern string) {
 	}
 }
 
-func initExclusiveMinimumValidation(def interface{}, exclMin *float64) {
+func initExclusiveMinimumValidation(def any, exclMin *float64) {
 	switch actual := def.(type) {
 	case *Parameter:
 		actual.Minimum = exclMin
@@ -735,7 +743,7 @@ func initExclusiveMinimumValidation(def interface{}, exclMin *float64) {
 	}
 }
 
-func initMinimumValidation(def interface{}, min *float64) {
+func initMinimumValidation(def any, min *float64) {
 	switch actual := def.(type) {
 	case *Parameter:
 		actual.Minimum = min
@@ -749,7 +757,7 @@ func initMinimumValidation(def interface{}, min *float64) {
 	}
 }
 
-func initExclusiveMaximumValidation(def interface{}, exclMax *float64) {
+func initExclusiveMaximumValidation(def any, exclMax *float64) {
 	switch actual := def.(type) {
 	case *Parameter:
 		actual.Maximum = exclMax
@@ -763,7 +771,7 @@ func initExclusiveMaximumValidation(def interface{}, exclMax *float64) {
 	}
 }
 
-func initMaximumValidation(def interface{}, max *float64) {
+func initMaximumValidation(def any, max *float64) {
 	switch actual := def.(type) {
 	case *Parameter:
 		actual.Maximum = max
@@ -777,7 +785,7 @@ func initMaximumValidation(def interface{}, max *float64) {
 	}
 }
 
-func initMinLengthValidation(def interface{}, isArray bool, min *int) {
+func initMinLengthValidation(def any, isArray bool, min *int) {
 	switch actual := def.(type) {
 	case *Parameter:
 		if isArray {
@@ -792,7 +800,7 @@ func initMinLengthValidation(def interface{}, isArray bool, min *int) {
 	}
 }
 
-func initMaxLengthValidation(def interface{}, isArray bool, max *int) {
+func initMaxLengthValidation(def any, isArray bool, max *int) {
 	switch actual := def.(type) {
 	case *Parameter:
 		if isArray {
@@ -807,7 +815,7 @@ func initMaxLengthValidation(def interface{}, isArray bool, max *int) {
 	}
 }
 
-func initValidations(attr *expr.AttributeExpr, def interface{}) {
+func initValidations(attr *expr.AttributeExpr, def any) {
 	val := attr.Validation
 	if val == nil {
 		return

@@ -72,12 +72,19 @@ func TestClientTypes(t *testing.T) {
 		DSL  func()
 		Code string
 	}{
-		{"mixed-payload-attrs", testdata.MixedPayloadInBodyDSL, MixedPayloadInBodyClientTypesFile},
-		{"multiple-methods", testdata.MultipleMethodsDSL, MultipleMethodsClientTypesFile},
-		{"payload-extend-validate", testdata.PayloadExtendedValidateDSL, PayloadExtendedValidateClientTypesFile},
-		{"result-type-validate", testdata.ResultTypeValidateDSL, ResultTypeValidateClientTypesFile},
-		{"with-result-collection", testdata.ResultWithResultCollectionDSL, WithResultCollectionClientTypesFile},
-		{"empty-error-response-body", testdata.EmptyErrorResponseBodyDSL, EmptyErrorResponseBodyClientTypesFile},
+		{"client-mixed-payload-attrs", testdata.MixedPayloadInBodyDSL, MixedPayloadInBodyClientTypesFile},
+		{"client-multiple-methods", testdata.MultipleMethodsDSL, MultipleMethodsClientTypesFile},
+		{"client-payload-extend-validate", testdata.PayloadExtendedValidateDSL, PayloadExtendedValidateClientTypesFile},
+		{"client-result-type-validate", testdata.ResultTypeValidateDSL, ResultTypeValidateClientTypesFile},
+		{"client-with-result-collection", testdata.ResultWithResultCollectionDSL, WithResultCollectionClientTypesFile},
+		{"client-with-result-view", testdata.ResultWithResultViewDSL, ResultWithResultViewClientTypesFile},
+		{"client-empty-error-response-body", testdata.EmptyErrorResponseBodyDSL, EmptyErrorResponseBodyClientTypesFile},
+		{"client-with-error-custom-pkg", testdata.WithErrorCustomPkgDSL, WithErrorCustomPkgClientTypesFile},
+		{"client-body-custom-name", testdata.PayloadBodyCustomNameDSL, BodyCustomNameClientTypesFile},
+		{"client-path-custom-name", testdata.PayloadPathCustomNameDSL, ""},
+		{"client-query-custom-name", testdata.PayloadQueryCustomNameDSL, ""},
+		{"client-header-custom-name", testdata.PayloadHeaderCustomNameDSL, ""},
+		{"client-cookie-custom-name", testdata.PayloadCookieCustomNameDSL, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
@@ -284,9 +291,9 @@ func NewMethodExplicitBodyUserResultObjectMultipleViewResulttypemultipleviewsOK(
 const MixedPayloadInBodyClientTypesFile = `// MethodARequestBody is the type of the "ServiceMixedPayloadInBody" service
 // "MethodA" endpoint HTTP request body.
 type MethodARequestBody struct {
-	Any    interface{}          ` + "`" + `form:"any,omitempty" json:"any,omitempty" xml:"any,omitempty"` + "`" + `
+	Any    any                  ` + "`" + `form:"any,omitempty" json:"any,omitempty" xml:"any,omitempty"` + "`" + `
 	Array  []float32            ` + "`" + `form:"array" json:"array" xml:"array"` + "`" + `
-	Map    map[uint]interface{} ` + "`" + `form:"map,omitempty" json:"map,omitempty" xml:"map,omitempty"` + "`" + `
+	Map    map[uint]any         ` + "`" + `form:"map,omitempty" json:"map,omitempty" xml:"map,omitempty"` + "`" + `
 	Object *BPayloadRequestBody ` + "`" + `form:"object" json:"object" xml:"object"` + "`" + `
 	DupObj *BPayloadRequestBody ` + "`" + `form:"dup_obj,omitempty" json:"dup_obj,omitempty" xml:"dup_obj,omitempty"` + "`" + `
 }
@@ -308,9 +315,11 @@ func NewMethodARequestBody(p *servicemixedpayloadinbody.APayload) *MethodAReques
 		for i, val := range p.Array {
 			body.Array[i] = val
 		}
+	} else {
+		body.Array = []float32{}
 	}
 	if p.Map != nil {
-		body.Map = make(map[uint]interface{}, len(p.Map))
+		body.Map = make(map[uint]any, len(p.Map))
 		for key, val := range p.Map {
 			tk := key
 			tv := val
@@ -677,8 +686,10 @@ func ValidateMethodResultWithResultCollectionResponseBody(body *MethodResultWith
 // ValidateResulttypeResponseBody runs the validations defined on
 // ResulttypeResponseBody
 func ValidateResulttypeResponseBody(body *ResulttypeResponseBody) (err error) {
-	if err2 := ValidateRtCollectionResponseBody(body.X); err2 != nil {
-		err = goa.MergeErrors(err, err2)
+	if body.X != nil {
+		if err2 := ValidateRtCollectionResponseBody(body.X); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -707,6 +718,34 @@ func ValidateRtResponseBody(body *RtResponseBody) (err error) {
 }
 `
 
+const ResultWithResultViewClientTypesFile = `// MethodResultWithResultViewResponseBody is the type of the
+// "ServiceResultWithResultView" service "MethodResultWithResultView" endpoint
+// HTTP response body.
+type MethodResultWithResultViewResponseBody struct {
+	Name *string         ` + "`" + `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"` + "`" + `
+	Rt   *RtResponseBody ` + "`" + `form:"rt,omitempty" json:"rt,omitempty" xml:"rt,omitempty"` + "`" + `
+}
+
+// RtResponseBody is used to define fields on response body types.
+type RtResponseBody struct {
+	X *string ` + "`" + `form:"x,omitempty" json:"x,omitempty" xml:"x,omitempty"` + "`" + `
+}
+
+// NewMethodResultWithResultViewResulttypeOK builds a
+// "ServiceResultWithResultView" service "MethodResultWithResultView" endpoint
+// result from a HTTP "OK" response.
+func NewMethodResultWithResultViewResulttypeOK(body *MethodResultWithResultViewResponseBody) *serviceresultwithresultviewviews.ResulttypeView {
+	v := &serviceresultwithresultviewviews.ResulttypeView{
+		Name: body.Name,
+	}
+	if body.Rt != nil {
+		v.Rt = unmarshalRtResponseBodyToServiceresultwithresultviewviewsRtView(body.Rt)
+	}
+
+	return v
+}
+`
+
 const EmptyErrorResponseBodyClientTypesFile = `// NewMethodEmptyErrorResponseBodyInternalError builds a
 // ServiceEmptyErrorResponseBody service MethodEmptyErrorResponseBody endpoint
 // internal_error error.
@@ -729,5 +768,48 @@ func NewMethodEmptyErrorResponseBodyNotFound(inHeader string) serviceemptyerrorr
 	v := serviceemptyerrorresponsebody.NotFound(inHeader)
 
 	return v
+}
+`
+const WithErrorCustomPkgClientTypesFile = `// MethodWithErrorCustomPkgErrorNameResponseBody is the type of the
+// "ServiceWithErrorCustomPkg" service "MethodWithErrorCustomPkg" endpoint HTTP
+// response body for the "error_name" error.
+type MethodWithErrorCustomPkgErrorNameResponseBody struct {
+	Name *string ` + "`" + `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"` + "`" + `
+}
+
+// NewMethodWithErrorCustomPkgErrorName builds a ServiceWithErrorCustomPkg
+// service MethodWithErrorCustomPkg endpoint error_name error.
+func NewMethodWithErrorCustomPkgErrorName(body *MethodWithErrorCustomPkgErrorNameResponseBody) *custom.CustomError {
+	v := &custom.CustomError{
+		Name: *body.Name,
+	}
+
+	return v
+}
+
+// ValidateMethodWithErrorCustomPkgErrorNameResponseBody runs the validations
+// defined on MethodWithErrorCustomPkg_error_name_Response_Body
+func ValidateMethodWithErrorCustomPkgErrorNameResponseBody(body *MethodWithErrorCustomPkgErrorNameResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+`
+
+const BodyCustomNameClientTypesFile = `// MethodBodyCustomNameRequestBody is the type of the "ServiceBodyCustomName"
+// service "MethodBodyCustomName" endpoint HTTP request body.
+type MethodBodyCustomNameRequestBody struct {
+	Body *string ` + "`" + `form:"b,omitempty" json:"b,omitempty" xml:"b,omitempty"` + "`" + `
+}
+
+// NewMethodBodyCustomNameRequestBody builds the HTTP request body from the
+// payload of the "MethodBodyCustomName" endpoint of the
+// "ServiceBodyCustomName" service.
+func NewMethodBodyCustomNameRequestBody(p *servicebodycustomname.MethodBodyCustomNamePayload) *MethodBodyCustomNameRequestBody {
+	body := &MethodBodyCustomNameRequestBody{
+		Body: p.Body,
+	}
+	return body
 }
 `

@@ -75,7 +75,7 @@ type (
 		// Example returns a JSON serialized example value.
 		Example string
 		// Default returns the default value if any.
-		Default interface{}
+		Default any
 	}
 
 	// BuildFunctionData contains the data needed to generate a constructor
@@ -264,7 +264,7 @@ func FlagsCode(data []*CommandData) string {
 		Name:    "parse-endpoint-flags",
 		Source:  parseFlagsT,
 		Data:    data,
-		FuncMap: map[string]interface{}{"printDescription": printDescription},
+		FuncMap: map[string]any{"printDescription": printDescription},
 	}
 	var flagsCode bytes.Buffer
 	err := section.Write(&flagsCode)
@@ -282,7 +282,7 @@ func CommandUsage(data *CommandData) *codegen.SectionTemplate {
 		Name:    "cli-command-usage",
 		Source:  commandUsageT,
 		Data:    data,
-		FuncMap: map[string]interface{}{"printDescription": printDescription},
+		FuncMap: map[string]any{"printDescription": printDescription},
 	}
 }
 
@@ -293,7 +293,7 @@ func PayloadBuilderSection(buildFunction *BuildFunctionData) *codegen.SectionTem
 		Name:   "cli-build-payload",
 		Source: buildPayloadT,
 		Data:   buildFunction,
-		FuncMap: map[string]interface{}{
+		FuncMap: map[string]any{
 			"fieldCode": fieldCode,
 		},
 	}
@@ -308,8 +308,7 @@ func PayloadBuilderSection(buildFunction *BuildFunctionData) *codegen.SectionTem
 // description is the flag description
 // required determines if the flag is required
 // example is an example value for the flag
-//
-func NewFlagData(svcn, en, name, typeName, description string, required bool, example, def interface{}) *FlagData {
+func NewFlagData(svcn, en, name, typeName, description string, required bool, example, def any) *FlagData {
 	ex := jsonExample(example)
 	fn := goifyTerms(svcn, en, name)
 	return &FlagData{
@@ -327,32 +326,17 @@ func NewFlagData(svcn, en, name, typeName, description string, required bool, ex
 // FieldLoadCode returns the code used in the build payload function that
 // initializes one of the payload object fields. It returns the initialization
 // code and a boolean indicating whether the code requires an "err" variable.
-func FieldLoadCode(f *FlagData, argName, argTypeName, validate string, defaultValue interface{}, payload expr.DataType) (string, bool) {
+func FieldLoadCode(f *FlagData, argName, argTypeName, validate string, defaultValue any, payload expr.DataType, payloadRef string) (string, bool) {
 	var (
 		code    string
 		declErr bool
 		startIf string
 		endIf   string
-		rval    string
 	)
 	{
 		if !f.Required {
 			startIf = fmt.Sprintf("if %s != \"\" {\n", f.FullName)
 			endIf = "\n}"
-		}
-		if expr.IsPrimitive(payload) {
-			switch payload {
-			case expr.Boolean:
-				rval = "false"
-			case expr.String:
-				rval = "\"\""
-			case expr.Bytes, expr.Any:
-				rval = "nil"
-			default:
-				rval = "0"
-			}
-		} else {
-			rval = "nil"
 		}
 		if argTypeName == codegen.GoNativeTypeName(expr.String) {
 			ref := "&"
@@ -366,18 +350,48 @@ func FieldLoadCode(f *FlagData, argName, argTypeName, validate string, defaultVa
 			code, declErr, checkErr = conversionCode(f.FullName, argName, argTypeName, !f.Required && defaultValue == nil)
 			if checkErr {
 				code += "\nif err != nil {\n"
+				nilVal := "nil"
+				if expr.IsPrimitive(payload) {
+					code += fmt.Sprintf("var zero %s\n", payloadRef)
+					nilVal = "zero"
+				}
 				if flagType(argTypeName) == "JSON" {
-					code += fmt.Sprintf(`return %v, fmt.Errorf("invalid JSON for %s, \nerror: %%s, \nexample of valid JSON:\n%%s", err, %q)`,
-						rval, argName, f.Example)
+					code += fmt.Sprintf(`return %s, fmt.Errorf("invalid JSON for %s, \nerror: %%s, \nexample of valid JSON:\n%%s", err, %q)`,
+						nilVal, argName, f.Example)
 				} else {
-					code += fmt.Sprintf(`return %v, fmt.Errorf("invalid value for %s, must be %s")`,
-						rval, argName, f.Type)
+					code += fmt.Sprintf(`return %s, fmt.Errorf("invalid value for %s, must be %s")`,
+						nilVal, argName, f.Type)
 				}
 				code += "\n}"
 			}
 		}
 		if validate != "" {
-			code += "\n" + validate + "\n" + fmt.Sprintf("if err != nil {\n\treturn %v, err\n}", rval)
+			nilCheck := "if " + argName + " != nil {"
+			if strings.HasPrefix(validate, nilCheck) {
+				// hackety hack... the validation code is generated for the client and needs to
+				// account for the fact that the field could be nil in this case. We are reusing
+				// that code to validate a CLI flag which can never be nil.  Lint tools complain
+				// about that so remove the if statements. Ideally we'd have a better way to do
+				// this but that requires a lot of changes and the added complexity might not be
+				// worth it.
+				var lines []string
+				ls := strings.Split(validate, "\n")
+				for i := 1; i < len(ls)-1; i++ {
+					if ls[i+1] == nilCheck {
+						i++ // skip both closing brace on previous line and check
+						continue
+					}
+					lines = append(lines, ls[i])
+				}
+				validate = strings.Join(lines, "\n")
+			}
+			code += "\n" + validate + "\n"
+			nilVal := "nil"
+			if expr.IsPrimitive(payload) {
+				code += fmt.Sprintf("var zero %s\n", payloadRef)
+				nilVal = "zero"
+			}
+			code += fmt.Sprintf("if err != nil {\n\treturn %s, err\n}", nilVal)
 		}
 	}
 	return fmt.Sprintf("%s%s%s", startIf, code, endIf), declErr
@@ -396,13 +410,13 @@ func flagType(tname string) string {
 }
 
 // jsonExample generates a json example
-func jsonExample(v interface{}) string {
+func jsonExample(v any) string {
 	// In JSON, keys must be a string. But goa allows map keys to be anything.
 	r := reflect.ValueOf(v)
 	if r.Kind() == reflect.Map {
 		keys := r.MapKeys()
 		if keys[0].Kind() != reflect.String {
-			a := make(map[string]interface{}, len(keys))
+			a := make(map[string]any, len(keys))
 			var kstr string
 			for _, k := range keys {
 				switch t := k.Interface().(type) {
@@ -432,7 +446,7 @@ func jsonExample(v interface{}) string {
 		ex = string(b)
 	}
 	if strings.Contains(ex, "\n") {
-		ex = "'" + strings.Replace(ex, "'", "\\'", -1) + "'"
+		ex = "'" + strings.ReplaceAll(ex, "'", "\\'") + "'"
 	}
 	return ex
 }
@@ -479,7 +493,7 @@ func conversionCode(from, to, typeName string, pointer bool) (string, bool, bool
 		}
 		parse += fmt.Sprintf("%s, err = strconv.ParseBool(%s)", target, from)
 	case intN:
-		parse = fmt.Sprintf("var v int64\nv, err = strconv.ParseInt(%s, 10, 64)", from)
+		parse = fmt.Sprintf("var v int64\nv, err = strconv.ParseInt(%s, 10, strconv.IntSize)", from)
 		cast = fmt.Sprintf("%s %s= int(v)", target, decl)
 	case int32N:
 		parse = fmt.Sprintf("var v int64\nv, err = strconv.ParseInt(%s, 10, 32)", from)
@@ -488,7 +502,7 @@ func conversionCode(from, to, typeName string, pointer bool) (string, bool, bool
 		parse = fmt.Sprintf("%s, err %s= strconv.ParseInt(%s, 10, 64)", target, decl, from)
 		declErr = decl == ""
 	case uintN:
-		parse = fmt.Sprintf("var v uint64\nv, err = strconv.ParseUint(%s, 10, 64)", from)
+		parse = fmt.Sprintf("var v uint64\nv, err = strconv.ParseUint(%s, 10, strconv.IntSize)", from)
 		cast = fmt.Sprintf("%s %s= uint(v)", target, decl)
 	case uint32N:
 		parse = fmt.Sprintf("var v uint64\nv, err = strconv.ParseUint(%s, 10, 32)", from)
@@ -542,8 +556,8 @@ func goifyTerms(terms ...string) string {
 }
 
 func printDescription(desc string) string {
-	res := strings.Replace(desc, "`", "`+\"`\"+`", -1)
-	res = strings.Replace(res, "\n", "\n\t", -1)
+	res := strings.ReplaceAll(desc, "`", "`+\"`\"+`")
+	res = strings.ReplaceAll(res, "\n", "\n\t")
 	return res
 }
 
@@ -566,7 +580,7 @@ func fieldCode(init *PayloadInitData) string {
 	// because the args cannot be user types.
 	c, _, err := codegen.InitStructFields(init.Args, varn, "", init.ReturnTypePkg)
 	if err != nil {
-		panic(err) //bug
+		panic(err) // bug
 	}
 	return c
 }

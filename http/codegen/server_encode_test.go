@@ -51,6 +51,7 @@ func TestEncode(t *testing.T) {
 		{"body-string", testdata.ResultBodyStringDSL, testdata.ResultBodyStringEncodeCode},
 		{"body-object", testdata.ResultBodyObjectDSL, testdata.ResultBodyObjectEncodeCode},
 		{"body-user", testdata.ResultBodyUserDSL, testdata.ResultBodyUserEncodeCode},
+		{"body-union", testdata.ResultBodyUnionDSL, testdata.ResultBodyUnionEncodeCode},
 		{"body-result-multiple-views", testdata.ResultBodyMultipleViewsDSL, testdata.ResultBodyMultipleViewsEncodeCode},
 		{"body-result-collection-multiple-views", testdata.ResultBodyCollectionDSL, testdata.ResultBodyCollectionMultipleViewsEncodeCode},
 		{"body-result-collection-explicit-view", testdata.ResultBodyCollectionExplicitViewDSL, testdata.ResultBodyCollectionExplicitViewEncodeCode},
@@ -80,6 +81,9 @@ func TestEncode(t *testing.T) {
 
 		{"empty-server-response", testdata.EmptyServerResponseDSL, testdata.EmptyServerResponseEncodeCode},
 		{"empty-server-response-with-tags", testdata.EmptyServerResponseWithTagsDSL, testdata.EmptyServerResponseWithTagsEncodeCode},
+
+		{"result-with-custom-pkg-type", testdata.ResultWithCustomPkgTypeDSL, testdata.ResultWithCustomPkgTypeEncodeCode},
+		{"result-with-embedded-custom-pkg-type", testdata.EmbeddedCustomPkgTypeDSL, testdata.ResultWithEmbeddedCustomPkgTypeEncodeCode},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
@@ -95,6 +99,48 @@ func TestEncode(t *testing.T) {
 			code := codegen.SectionCode(t, sections[1])
 			if code != c.Code {
 				t.Errorf("invalid code, got:\n%s\ngot vs. expected:\n%s", code, codegen.Diff(t, code, c.Code))
+			}
+		})
+	}
+}
+
+func TestEncodeMarshallingAndUnmarshalling(t *testing.T) {
+	cases := []struct {
+		Name           string
+		DSL            func()
+		Code           []string
+		SectionsOffset int
+	}{
+		{"embedded-custom-pkg-type", testdata.EmbeddedCustomPkgTypeDSL, []string{
+			testdata.EmbeddedCustomPkgTypeUnmarshalCode,
+			testdata.EmbeddedCustomPkgTypeMarshalCode}, 3},
+		{"array-alias-extended", testdata.ArrayAliasExtendedDSL, []string{
+			testdata.ArrayAliasExtendedUnmarshalCode,
+			testdata.ArrayAliasExtendedMarshalCode}, 3},
+		{"extension-with-alias", testdata.ExtensionWithAliasDSL, []string{
+			testdata.ExtensionWithAliasUnmarshalExtensionCode,
+			testdata.ExtensionWithAliasUnmarshalBarCode,
+			testdata.ExtensionWithAliasMarshalResultCode,
+			testdata.ExtensionWithAliasMarshalExtensionCode,
+			testdata.ExtensionWithAliasMarshalBarCode}, 4},
+	}
+	for _, c := range cases {
+		t.Run(c.Name, func(t *testing.T) {
+			RunHTTPDSL(t, c.DSL)
+			fs := ServerFiles("", expr.Root)
+			if len(fs) != 2 {
+				t.Fatalf("got %d files, expected two", len(fs))
+			}
+			sections := fs[1].SectionTemplates
+			totalSectionsExpected := c.SectionsOffset + len(c.Code)
+			if len(sections) != totalSectionsExpected {
+				t.Fatalf("got %d sections, expected %d", len(sections), totalSectionsExpected)
+			}
+			for i := 0; i < len(c.Code); i++ {
+				code := codegen.SectionCode(t, sections[c.SectionsOffset+i])
+				if code != c.Code[i] {
+					t.Errorf("%s %d invalid code, got:\n%s\ngot vs. expected:\n%s", sections[c.SectionsOffset+i].Name, i, code, codegen.Diff(t, code, c.Code[i]))
+				}
 			}
 		})
 	}

@@ -29,18 +29,23 @@ type (
 		// primitive types even if they are required or has a default value.
 		// It ignores UseDefault and IgnoreRequired properties.
 		Pointer bool
-		// IgnoreRequired if true indicates that the attribute uses non-pointers
-		// to hold optional attributes (i.e. attributes that are not required).
+		// IgnoreRequired if true indicates that the transport object
+		// (proto) uses non-pointers to hold required attributes and
+		// therefore do not need to be validated.
 		IgnoreRequired bool
 		// UseDefault if true indicates that the attribute uses non-pointers for
 		// primitive types if they have default value. If false, the attribute with
 		// primitive types are non-pointers if they are required, otherwise they
 		// are pointers.
 		UseDefault bool
-		// Pkg is the package name where the attribute type is found.
-		Pkg string
 		// Scope is the attribute scope.
 		Scope Attributor
+		// DefaultPkg is the default package name where the attribute
+		// type is found. it can be overridden via struct:pkg:path meta.
+		DefaultPkg string
+		// IsInterface is true if the attribute is an interface (union type).
+		// In this case assigning child attributes requires a type assertion.
+		IsInterface bool
 	}
 
 	// AttributeScope contains the scope of an attribute. It implements the
@@ -89,8 +94,8 @@ func NewAttributeContext(pointer, reqIgnore, useDefault bool, pkg string, scope 
 		Pointer:        pointer,
 		IgnoreRequired: reqIgnore,
 		UseDefault:     useDefault,
-		Pkg:            pkg,
 		Scope:          NewAttributeScope(scope),
+		DefaultPkg:     pkg,
 	}
 }
 
@@ -100,12 +105,12 @@ func NewAttributeScope(scope *NameScope) *AttributeScope {
 }
 
 // IsCompatible returns an error if a and b are not both objects, both arrays,
-// both maps or both the same primitive type. actx and bctx are used to build
-// the error message if any.
+// both maps, both unions or one union and one object.  actx and bctx are used
+// to build the error message if any.
 func IsCompatible(a, b expr.DataType, actx, bctx string) error {
 	switch {
 	case expr.IsObject(a):
-		if !expr.IsObject(b) {
+		if !expr.IsObject(b) && !expr.IsUnion(b) {
 			return fmt.Errorf("%s is an object but %s type is %s", actx, bctx, b.Name())
 		}
 	case expr.IsArray(a):
@@ -115,6 +120,10 @@ func IsCompatible(a, b expr.DataType, actx, bctx string) error {
 	case expr.IsMap(a):
 		if !expr.IsMap(b) {
 			return fmt.Errorf("%s is a hash but %s type is %s", actx, bctx, b.Name())
+		}
+	case expr.IsUnion(a):
+		if !expr.IsUnion(b) && !expr.IsObject(b) {
+			return fmt.Errorf("%s is a union but %s type is %s", actx, bctx, b.Name())
 		}
 	default:
 		aUT, isAUT := a.(expr.UserType)
@@ -202,20 +211,15 @@ func (a *AttributeContext) IsPrimitivePointer(name string, att *expr.AttributeEx
 	if a.Pointer {
 		return true
 	}
-	if a.IgnoreRequired {
-		return false
-	}
 	return att.IsPrimitivePointer(name, a.UseDefault)
 }
 
-// IsRequired returns true if the attribute with given name is a required
-// attribute in the parent. If IgnoreRequired is set to true, IsRequired always
-// returns false.
-func (a *AttributeContext) IsRequired(name string, att *expr.AttributeExpr) bool {
-	if a.IgnoreRequired {
-		return false
+// Pkg returns the package name of the given type.
+func (a *AttributeContext) Pkg(att *expr.AttributeExpr) string {
+	if loc := UserTypeLocation(att.Type); loc != nil {
+		return loc.PackageName()
 	}
-	return att.IsRequired(name)
+	return a.DefaultPkg
 }
 
 // Dup creates a shallow copy of the AttributeContext.
@@ -224,8 +228,8 @@ func (a *AttributeContext) Dup() *AttributeContext {
 		Pointer:        a.Pointer,
 		IgnoreRequired: a.IgnoreRequired,
 		UseDefault:     a.UseDefault,
-		Pkg:            a.Pkg,
 		Scope:          a.Scope,
+		DefaultPkg:     a.DefaultPkg,
 	}
 }
 
@@ -247,7 +251,7 @@ func (a *AttributeScope) Ref(att *expr.AttributeExpr, pkg string) string {
 }
 
 // Field returns a valid Go struct field name.
-func (a *AttributeScope) Field(att *expr.AttributeExpr, name string, firstUpper bool) string {
+func (*AttributeScope) Field(att *expr.AttributeExpr, name string, firstUpper bool) string {
 	return GoifyAtt(att, name, firstUpper)
 }
 

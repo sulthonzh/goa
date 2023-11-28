@@ -1,9 +1,9 @@
 package testdata
 
-const PayloadWithNestedTypesClientTypeCode = `// NewMethodPayloadWithNestedTypesRequest builds the gRPC request type from the
-// payload of the "MethodPayloadWithNestedTypes" endpoint of the
+const PayloadWithNestedTypesClientTypeCode = `// NewProtoMethodPayloadWithNestedTypesRequest builds the gRPC request type
+// from the payload of the "MethodPayloadWithNestedTypes" endpoint of the
 // "ServicePayloadWithNestedTypes" service.
-func NewMethodPayloadWithNestedTypesRequest(payload *servicepayloadwithnestedtypes.MethodPayloadWithNestedTypesPayload) *service_payload_with_nested_typespb.MethodPayloadWithNestedTypesRequest {
+func NewProtoMethodPayloadWithNestedTypesRequest(payload *servicepayloadwithnestedtypes.MethodPayloadWithNestedTypesPayload) *service_payload_with_nested_typespb.MethodPayloadWithNestedTypesRequest {
 	message := &service_payload_with_nested_typespb.MethodPayloadWithNestedTypesRequest{}
 	if payload.AParams != nil {
 		message.AParams = svcServicepayloadwithnestedtypesAParamsToServicePayloadWithNestedTypespbAParams(payload.AParams)
@@ -102,15 +102,26 @@ func svcServicepayloadwithnestedtypesBParamsToServicePayloadWithNestedTypespbBPa
 }
 `
 
-const PayloadWithAliasTypeClientTypeCode = `// NewMethodMessageUserTypeWithAliasRequest builds the gRPC request type from
-// the payload of the "MethodMessageUserTypeWithAlias" endpoint of the
+const PayloadWithMultipleUseTypesClientTypeCode = `// NewProtoDupePayload builds the gRPC request type from the payload of the
+// "MethodPayloadDuplicateA" endpoint of the "ServicePayloadWithNestedTypes"
+// service.
+func NewProtoDupePayload(payload servicepayloadwithnestedtypes.DupePayload) *service_payload_with_nested_typespb.DupePayload {
+	message := &service_payload_with_nested_typespb.DupePayload{}
+	message.Field = string(payload)
+	return message
+}
+`
+
+const PayloadWithAliasTypeClientTypeCode = `// NewProtoMethodMessageUserTypeWithAliasRequest builds the gRPC request type
+// from the payload of the "MethodMessageUserTypeWithAlias" endpoint of the
 // "ServiceMessageUserTypeWithAlias" service.
-func NewMethodMessageUserTypeWithAliasRequest(payload *servicemessageusertypewithalias.PayloadAliasT) *service_message_user_type_with_aliaspb.MethodMessageUserTypeWithAliasRequest {
+func NewProtoMethodMessageUserTypeWithAliasRequest(payload *servicemessageusertypewithalias.PayloadAliasT) *service_message_user_type_with_aliaspb.MethodMessageUserTypeWithAliasRequest {
 	message := &service_message_user_type_with_aliaspb.MethodMessageUserTypeWithAliasRequest{
-		IntAliasField: int(payload.IntAliasField),
+		IntAliasField: int32(payload.IntAliasField),
 	}
 	if payload.OptionalIntAliasField != nil {
-		message.OptionalIntAliasField = int(*payload.OptionalIntAliasField)
+		optionalIntAliasField := int32(*payload.OptionalIntAliasField)
+		message.OptionalIntAliasField = &optionalIntAliasField
 	}
 	return message
 }
@@ -123,17 +134,40 @@ func NewMethodMessageUserTypeWithAliasResult(message *service_message_user_type_
 		IntAliasField: servicemessageusertypewithalias.IntAlias(message.IntAliasField),
 	}
 	if message.OptionalIntAliasField != nil {
-		optionalIntAliasFieldptr := servicemessageusertypewithalias.IntAlias(message.OptionalIntAliasField)
-		result.OptionalIntAliasField = &optionalIntAliasFieldptr
+		optionalIntAliasField := servicemessageusertypewithalias.IntAlias(*message.OptionalIntAliasField)
+		result.OptionalIntAliasField = &optionalIntAliasField
 	}
 	return result
 }
 `
 
-const ResultWithCollectionClientTypeCode = `// NewMethodResultWithCollectionRequest builds the gRPC request type from the
-// payload of the "MethodResultWithCollection" endpoint of the
+const ResultWithAliasValidationClientTypeCode = `// NewProtoMethodResultWithAliasValidationRequest builds the gRPC request type
+// from the payload of the "MethodResultWithAliasValidation" endpoint of the
+// "ServiceResultWithAliasValidation" service.
+func NewProtoMethodResultWithAliasValidationRequest() *service_result_with_alias_validationpb.MethodResultWithAliasValidationRequest {
+	message := &service_result_with_alias_validationpb.MethodResultWithAliasValidationRequest{}
+	return message
+}
+
+// NewMethodResultWithAliasValidationResult builds the result type of the
+// "MethodResultWithAliasValidation" endpoint of the
+// "ServiceResultWithAliasValidation" service from the gRPC response type.
+func NewMethodResultWithAliasValidationResult(message *service_result_with_alias_validationpb.UUID) serviceresultwithaliasvalidation.UUID {
+	result := serviceresultwithaliasvalidation.UUID(message.Field)
+	return result
+}
+
+// ValidateUUID runs the validations defined on UUID.
+func ValidateUUID(message *service_result_with_alias_validationpb.UUID) (err error) {
+	err = goa.MergeErrors(err, goa.ValidateFormat("message.field", message.Field, goa.FormatUUID))
+	return
+}
+`
+
+const ResultWithCollectionClientTypeCode = `// NewProtoMethodResultWithCollectionRequest builds the gRPC request type from
+// the payload of the "MethodResultWithCollection" endpoint of the
 // "ServiceResultWithCollection" service.
-func NewMethodResultWithCollectionRequest() *service_result_with_collectionpb.MethodResultWithCollectionRequest {
+func NewProtoMethodResultWithCollectionRequest() *service_result_with_collectionpb.MethodResultWithCollectionRequest {
 	message := &service_result_with_collectionpb.MethodResultWithCollectionRequest{}
 	return message
 }
@@ -163,7 +197,8 @@ func svcServiceresultwithcollectionResultTToServiceResultWithCollectionpbResultT
 		for i, val := range v.CollectionField {
 			res.CollectionField.Field[i] = &service_result_with_collectionpb.RT{}
 			if val.IntField != nil {
-				res.CollectionField.Field[i].IntField = int32(*val.IntField)
+				intField := int32(*val.IntField)
+				res.CollectionField.Field[i].IntField = &intField
 			}
 		}
 	}
@@ -183,9 +218,9 @@ func protobufServiceResultWithCollectionpbResultTToServiceresultwithcollectionRe
 		res.CollectionField = make([]*serviceresultwithcollection.RT, len(v.CollectionField.Field))
 		for i, val := range v.CollectionField.Field {
 			res.CollectionField[i] = &serviceresultwithcollection.RT{}
-			if val.IntField != 0 {
-				intFieldptr := int(val.IntField)
-				res.CollectionField[i].IntField = &intFieldptr
+			if val.IntField != nil {
+				intField := int(*val.IntField)
+				res.CollectionField[i].IntField = &intField
 			}
 		}
 	}
@@ -194,10 +229,10 @@ func protobufServiceResultWithCollectionpbResultTToServiceresultwithcollectionRe
 }
 `
 
-const WithErrorsClientTypeCode = `// NewMethodUnaryRPCWithErrorsRequest builds the gRPC request type from the
-// payload of the "MethodUnaryRPCWithErrors" endpoint of the
+const WithErrorsClientTypeCode = `// NewProtoMethodUnaryRPCWithErrorsRequest builds the gRPC request type from
+// the payload of the "MethodUnaryRPCWithErrors" endpoint of the
 // "ServiceUnaryRPCWithErrors" service.
-func NewMethodUnaryRPCWithErrorsRequest(payload string) *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsRequest {
+func NewProtoMethodUnaryRPCWithErrorsRequest(payload string) *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsRequest {
 	message := &service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsRequest{}
 	message.Field = payload
 	return message
@@ -216,10 +251,8 @@ func NewMethodUnaryRPCWithErrorsResult(message *service_unary_rpc_with_errorspb.
 // service from the gRPC error response type.
 func NewMethodUnaryRPCWithErrorsInternalError(message *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsInternalError) *serviceunaryrpcwitherrors.AnotherError {
 	er := &serviceunaryrpcwitherrors.AnotherError{
-		Name: message.Name,
-	}
-	if message.Description != "" {
-		er.Description = &message.Description
+		Name:        message.Name,
+		Description: message.Description,
 	}
 	return er
 }
@@ -229,10 +262,8 @@ func NewMethodUnaryRPCWithErrorsInternalError(message *service_unary_rpc_with_er
 // service from the gRPC error response type.
 func NewMethodUnaryRPCWithErrorsBadRequestError(message *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsBadRequestError) *serviceunaryrpcwitherrors.AnotherError {
 	er := &serviceunaryrpcwitherrors.AnotherError{
-		Name: message.Name,
-	}
-	if message.Description != "" {
-		er.Description = &message.Description
+		Name:        message.Name,
+		Description: message.Description,
 	}
 	return er
 }
@@ -241,52 +272,166 @@ func NewMethodUnaryRPCWithErrorsBadRequestError(message *service_unary_rpc_with_
 // "MethodUnaryRPCWithErrors" endpoint of the "ServiceUnaryRPCWithErrors"
 // service from the gRPC error response type.
 func NewMethodUnaryRPCWithErrorsCustomErrorError(message *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsCustomErrorError) *serviceunaryrpcwitherrors.ErrorType {
-	er := &serviceunaryrpcwitherrors.ErrorType{}
-	if message.A != "" {
-		er.A = &message.A
+	er := &serviceunaryrpcwitherrors.ErrorType{
+		A: message.A,
 	}
 	return er
 }
 
 // ValidateMethodUnaryRPCWithErrorsInternalError runs the validations defined
 // on MethodUnaryRPCWithErrorsInternalError.
-func ValidateMethodUnaryRPCWithErrorsInternalError(message *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsInternalError) (err error) {
-	if !(message.Name == "this" || message.Name == "that") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("message.name", message.Name, []interface{}{"this", "that"}))
+func ValidateMethodUnaryRPCWithErrorsInternalError(errmsg *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsInternalError) (err error) {
+	if !(errmsg.Name == "this" || errmsg.Name == "that") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("errmsg.name", errmsg.Name, []any{"this", "that"}))
 	}
 	return
 }
 
 // ValidateMethodUnaryRPCWithErrorsBadRequestError runs the validations defined
 // on MethodUnaryRPCWithErrorsBadRequestError.
-func ValidateMethodUnaryRPCWithErrorsBadRequestError(message *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsBadRequestError) (err error) {
-	if !(message.Name == "this" || message.Name == "that") {
-		err = goa.MergeErrors(err, goa.InvalidEnumValueError("message.name", message.Name, []interface{}{"this", "that"}))
+func ValidateMethodUnaryRPCWithErrorsBadRequestError(errmsg *service_unary_rpc_with_errorspb.MethodUnaryRPCWithErrorsBadRequestError) (err error) {
+	if !(errmsg.Name == "this" || errmsg.Name == "that") {
+		err = goa.MergeErrors(err, goa.InvalidEnumValueError("errmsg.name", errmsg.Name, []any{"this", "that"}))
 	}
 	return
 }
 `
 
-const BidirectionalStreamingRPCSameTypeClientTypeCode = `func NewUserType(v *service_bidirectional_streaming_rpc_same_typepb.MethodBidirectionalStreamingRPCSameTypeResponse) *servicebidirectionalstreamingrpcsametype.UserType {
-	result := &servicebidirectionalstreamingrpcsametype.UserType{}
-	if v.A != 0 {
-		aptr := int(v.A)
-		result.A = &aptr
+const BidirectionalStreamingRPCSameTypeClientTypeCode = `func NewMethodBidirectionalStreamingRPCSameTypeResponseUserType(v *service_bidirectional_streaming_rpc_same_typepb.MethodBidirectionalStreamingRPCSameTypeResponse) *servicebidirectionalstreamingrpcsametype.UserType {
+	result := &servicebidirectionalstreamingrpcsametype.UserType{
+		B: v.B,
 	}
-	if v.B != "" {
-		result.B = &v.B
+	if v.A != nil {
+		a := int(*v.A)
+		result.A = &a
 	}
 	return result
 }
 
-func NewMethodBidirectionalStreamingRPCSameTypeStreamingRequest(spayload *servicebidirectionalstreamingrpcsametype.UserType) *service_bidirectional_streaming_rpc_same_typepb.MethodBidirectionalStreamingRPCSameTypeStreamingRequest {
-	v := &service_bidirectional_streaming_rpc_same_typepb.MethodBidirectionalStreamingRPCSameTypeStreamingRequest{}
-	if spayload.A != nil {
-		v.A = int32(*spayload.A)
+func NewProtoUserTypeMethodBidirectionalStreamingRPCSameTypeStreamingRequest(spayload *servicebidirectionalstreamingrpcsametype.UserType) *service_bidirectional_streaming_rpc_same_typepb.MethodBidirectionalStreamingRPCSameTypeStreamingRequest {
+	v := &service_bidirectional_streaming_rpc_same_typepb.MethodBidirectionalStreamingRPCSameTypeStreamingRequest{
+		B: spayload.B,
 	}
-	if spayload.B != nil {
-		v.B = *spayload.B
+	if spayload.A != nil {
+		a := int32(*spayload.A)
+		v.A = &a
 	}
 	return v
+}
+`
+
+const StructMetaTypeTypeCode = `// NewProtoMethodRequest builds the gRPC request type from the payload of the
+// "Method" endpoint of the "UsingMetaTypes" service.
+func NewProtoMethodRequest(payload *usingmetatypes.MethodPayload) *using_meta_typespb.MethodRequest {
+	message := &using_meta_typespb.MethodRequest{}
+	a := int64(payload.A)
+	message.A = &a
+	b := int64(payload.B)
+	message.B = &b
+	if payload.D != nil {
+		d := int64(*payload.D)
+		message.D = &d
+	}
+	if payload.C != nil {
+		message.C = make([]int64, len(payload.C))
+		for i, val := range payload.C {
+			message.C[i] = int64(val)
+		}
+	}
+	return message
+}
+
+// NewMethodResult builds the result type of the "Method" endpoint of the
+// "UsingMetaTypes" service from the gRPC response type.
+func NewMethodResult(message *using_meta_typespb.MethodResponse) *usingmetatypes.MethodResult {
+	result := &usingmetatypes.MethodResult{}
+	if message.A != nil {
+		result.A = flag.ErrorHandling(*message.A)
+	}
+	if message.B != nil {
+		result.B = flag.ErrorHandling(*message.B)
+	}
+	if message.D != nil {
+		d := flag.ErrorHandling(*message.D)
+		result.D = &d
+	}
+	if message.A == nil {
+		result.A = 1
+	}
+	if message.B == nil {
+		result.B = 2
+	}
+	if message.C != nil {
+		result.C = make([]time.Duration, len(message.C))
+		for i, val := range message.C {
+			result.C[i] = time.Duration(val)
+		}
+	}
+	return result
+}
+`
+
+const StructFieldNameMetaTypeClientTypesCode = `// NewProtoMethodRequest builds the gRPC request type from the payload of the
+// "Method" endpoint of the "UsingMetaTypes" service.
+func NewProtoMethodRequest(payload *usingmetatypes.MethodPayload) *using_meta_typespb.MethodRequest {
+	message := &using_meta_typespb.MethodRequest{
+		A: &payload.Foo,
+	}
+	if payload.Bar != nil {
+		message.B = make([]int64, len(payload.Bar))
+		for i, val := range payload.Bar {
+			message.B[i] = val
+		}
+	}
+	return message
+}
+
+// NewMethodResult builds the result type of the "Method" endpoint of the
+// "UsingMetaTypes" service from the gRPC response type.
+func NewMethodResult(message *using_meta_typespb.MethodResponse) *usingmetatypes.MethodResult {
+	result := &usingmetatypes.MethodResult{}
+	if message.A != nil {
+		result.Foo = *message.A
+	}
+	if message.A == nil {
+		result.Foo = 1
+	}
+	if message.B != nil {
+		result.Bar = make([]int64, len(message.B))
+		for i, val := range message.B {
+			result.Bar[i] = val
+		}
+	}
+	return result
+}
+
+// ValidateMethodResponse runs the validations defined on MethodResponse.
+func ValidateMethodResponse(message *using_meta_typespb.MethodResponse) (err error) {
+	if message.B == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("b", "message"))
+	}
+	return
+}
+`
+
+const DefaultFieldsTypeCode = `// NewProtoMethodRequest builds the gRPC request type from the payload of the
+// "Method" endpoint of the "DefaultFields" service.
+func NewProtoMethodRequest(payload *defaultfields.MethodPayload) *default_fieldspb.MethodRequest {
+	message := &default_fieldspb.MethodRequest{
+		Req:  payload.Req,
+		Opt:  payload.Opt,
+		Def0: &payload.Def0,
+		Def1: &payload.Def1,
+		Def2: &payload.Def2,
+		Reqs: payload.Reqs,
+		Opts: payload.Opts,
+		Defs: &payload.Defs,
+		Defe: &payload.Defe,
+		Rat:  payload.Rat,
+		Flt:  payload.Flt,
+		Flt0: &payload.Flt0,
+		Flt1: &payload.Flt1,
+	}
+	return message
 }
 `

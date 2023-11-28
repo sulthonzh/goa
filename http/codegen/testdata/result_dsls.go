@@ -619,6 +619,23 @@ var ResultBodyUserDSL = func() {
 	})
 }
 
+var ResultBodyUnionDSL = func() {
+	var Union = Type("Union", func() {
+		OneOf("Vals", func() {
+			Attribute("String", String)
+			Attribute("Int", Int)
+		})
+	})
+	Service("ServiceBodyUnion", func() {
+		Method("MethodBodyUnion", func() {
+			Result(Union)
+			HTTP(func() {
+				POST("/")
+			})
+		})
+	})
+}
+
 var ResultTypeValidateDSL = func() {
 	var ResultType = Type("ResultType", func() {
 		Attribute("a", String, func() {
@@ -744,6 +761,98 @@ var ResultWithResultCollectionDSL = func() {
 	})
 }
 
+var ResultWithCustomPkgTypeDSL = func() {
+	var Foo = Type("Foo", func() {
+		Meta("struct:pkg:path", "foo")
+		Attribute("bar", String)
+	})
+
+	Service("ServiceResultWithCustomPkgTypeDSL", func() {
+		Method("MethodResultWithCustomPkgTypeDSL", func() {
+			Payload(Foo)
+			Result(Foo)
+
+			HTTP(func() {
+				GET("/")
+			})
+		})
+	})
+}
+
+var EmbeddedCustomPkgTypeDSL = func() {
+	var Foo = Type("Foo", func() {
+		Meta("struct:pkg:path", "foo")
+		Attribute("bar", String)
+	})
+
+	var ContainedFoo = Type("ContainedFoo", func() {
+		Attribute("Foo", Foo)
+	})
+
+	Service("ServiceResultWithEmbeddedCustomPkgTypeDSL", func() {
+		Method("MethodResultWithEmbeddedCustomPkgTypeDSL", func() {
+			Payload(ContainedFoo)
+			Result(ContainedFoo)
+
+			HTTP(func() {
+				GET("/")
+			})
+		})
+	})
+}
+
+var ArrayAliasExtendedDSL = func() {
+	var Foo = Type("Foo", String)
+
+	var Extension = Type("Extension", func() {
+		Attribute("Foo", Foo)
+	})
+
+	var ResultType = Type("ResultType", func() {
+		Extend(Extension)
+	})
+
+	var _ = Service("FooService", func() {
+		Method("FooMethod", func() {
+			Payload(ArrayOf(ResultType))
+			Result(ArrayOf(ResultType))
+			HTTP(func() {
+				GET("/")
+			})
+		})
+	})
+
+}
+
+var ExtensionWithAliasDSL = func() {
+	var Bar = Type("Bar", func() {
+		Attribute("Bar", UInt)
+		Required("Bar")
+	})
+
+	var TypeWithAlias = Type("TypeWithAlias", func() {
+		Attribute("Bar", Bar)
+	})
+
+	var Extension = Type("Extension", func() {
+		Extend(TypeWithAlias)
+	})
+
+	var ResultType = Type("ResultType", func() {
+		Attribute("Extension", Extension)
+	})
+
+	var _ = Service("FooService", func() {
+		Method("FooMethod", func() {
+			Payload(ArrayOf(ResultType))
+			Result(ArrayOf(ResultType))
+			HTTP(func() {
+				GET("/")
+			})
+		})
+	})
+}
+
 var EmptyErrorResponseBodyDSL = func() {
 	Service("ServiceEmptyErrorResponseBody", func() {
 		Method("MethodEmptyErrorResponseBody", func() {
@@ -760,6 +869,23 @@ var EmptyErrorResponseBodyDSL = func() {
 					Body(Empty)
 					Header("in-header")
 				})
+			})
+		})
+	})
+}
+
+var WithErrorCustomPkgDSL = func() {
+	var CustomError = Type("CustomError", func() {
+		Meta("struct:pkg:path", "custom")
+		ErrorName("name")
+		Required("name")
+	})
+	Service("ServiceWithErrorCustomPkg", func() {
+		Method("MethodWithErrorCustomPkg", func() {
+			Error("error_name", CustomError)
+			HTTP(func() {
+				GET("/")
+				Response("error_name", StatusBadRequest)
 			})
 		})
 	})

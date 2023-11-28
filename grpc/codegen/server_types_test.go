@@ -15,12 +15,17 @@ func TestServerTypeFiles(t *testing.T) {
 		DSL  func()
 		Code string
 	}{
-		{"payload-with-nested-types", testdata.PayloadWithNestedTypesDSL, testdata.PayloadWithNestedTypesServerTypeCode},
-		{"payload-with-alias-type", testdata.PayloadWithAliasTypeDSL, testdata.PayloadWithAliasTypeServerTypeCode},
-		{"payload-with-mixed-attributes", testdata.PayloadWithMixedAttributesDSL, testdata.PayloadWithMixedAttributesServerTypeCode},
-		{"result-collection", testdata.ResultWithCollectionDSL, testdata.ResultWithCollectionServerTypeCode},
-		{"with-errors", testdata.UnaryRPCWithErrorsDSL, testdata.WithErrorsServerTypeCode},
-		{"elem-validation", testdata.ElemValidationDSL, testdata.ElemValidationServerTypesFile},
+		{"server-payload-with-nested-types", testdata.PayloadWithNestedTypesDSL, testdata.PayloadWithNestedTypesServerTypeCode},
+		{"server-payload-with-duplicate-use", testdata.PayloadWithMultipleUseTypesDSL, testdata.PayloadWithMultipleUseTypesServerTypeCode},
+		{"server-payload-with-alias-type", testdata.PayloadWithAliasTypeDSL, testdata.PayloadWithAliasTypeServerTypeCode},
+		{"server-payload-with-mixed-attributes", testdata.PayloadWithMixedAttributesDSL, testdata.PayloadWithMixedAttributesServerTypeCode},
+		{"server-result-collection", testdata.ResultWithCollectionDSL, testdata.ResultWithCollectionServerTypeCode},
+		{"server-with-errors", testdata.UnaryRPCWithErrorsDSL, testdata.WithErrorsServerTypeCode},
+		{"server-elem-validation", testdata.ElemValidationDSL, testdata.ElemValidationServerTypesFile},
+		{"server-alias-validation", testdata.AliasValidationDSL, testdata.AliasValidationServerTypesFile},
+		{"server-struct-meta-type", testdata.StructMetaTypeDSL, testdata.StructMetaTypeServerTypeCode},
+		{"server-struct-field-name-meta-type", testdata.StructFieldNameMetaTypeDSL, testdata.StructFieldNameMetaTypeServerTypesCode},
+		{"server-default-fields", testdata.DefaultFieldsDSL, testdata.DefaultFieldsServerTypeCode},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {

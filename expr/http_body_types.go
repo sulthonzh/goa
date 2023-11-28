@@ -1,10 +1,61 @@
 package expr
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"unicode"
 )
+
+// UnionToObject returns an object adequate to serialize the given union type in
+// HTTP requests and responses. The object has two fields: "Type" and "Value".
+// The "Type" field is a string that indicates the name of the union type. The
+// "Value" field is a string that contains the JSON encoded union value.
+func UnionToObject(att *AttributeExpr) *AttributeExpr {
+	example := att.Example(Root.API.ExampleGenerator)
+	js, err := json.Marshal(example)
+	if err != nil {
+		js = []byte("null")
+	}
+	values := AsUnion(att.Type).Values
+	names := make([]any, len(values))
+	vals := make([]string, len(values))
+	bases := make([]DataType, len(values))
+	for i, nat := range values {
+		names[i] = nat.Name
+		vals[i] = fmt.Sprintf("- %q", nat.Name)
+		bases[i] = nat.Attribute.Type
+	}
+	obj := Object([]*NamedAttributeExpr{
+		{Name: "Type", Attribute: &AttributeExpr{
+			Type:        String,
+			Description: "Union type name, one of:\n" + strings.Join(vals, "\n"),
+			Validation:  &ValidationExpr{Values: names},
+			Meta: MetaExpr{
+				"struct:tag:form": {"Type"},
+				"struct:tag:json": {"Type"},
+				"struct:tag:xml":  {"Type"},
+			},
+		}},
+		{Name: "Value", Attribute: &AttributeExpr{
+			Type:         String,
+			Description:  "JSON encoded union value",
+			UserExamples: []*ExampleExpr{{Value: string(js)}},
+			Bases:        bases, // For OpenAPI generation
+			Meta: MetaExpr{
+				"struct:tag:form": {"Value"},
+				"struct:tag:json": {"Value"},
+				"struct:tag:xml":  {"Value"},
+			},
+		}},
+	})
+	return &AttributeExpr{
+		Type:        &obj,
+		Description: att.Description,
+		Validation:  &ValidationExpr{Required: []string{"Type", "Value"}},
+	}
+}
 
 // defaultRequestHeaderAttributes returns a map keyed by the names of the
 // payload attributes that should come from the request HTTP headers by default.
@@ -16,11 +67,21 @@ import (
 // single "Authorization" header is used to compute both the username and
 // password attributes).
 func defaultRequestHeaderAttributes(e *HTTPEndpointExpr) map[string]bool {
-	if len(e.MethodExpr.Requirements) == 0 {
+	var requirements []*SecurityExpr
+	if e.MethodExpr.Requirements != nil {
+		requirements = e.MethodExpr.Requirements
+	}
+	if e.Service.ServiceExpr.Requirements != nil {
+		requirements = append(requirements, e.Service.ServiceExpr.Requirements...)
+	}
+	if Root.API.Requirements != nil {
+		requirements = append(requirements, Root.API.Requirements...)
+	}
+	if len(requirements) == 0 {
 		return nil
 	}
 	headers := make(map[string]bool)
-	for _, req := range e.MethodExpr.Requirements {
+	for _, req := range requirements {
 		for _, sch := range req.Schemes {
 			var field string
 			switch sch.Kind {
@@ -78,21 +139,31 @@ func httpRequestBody(a *HTTPEndpointExpr) *AttributeExpr {
 		bodyOnly = headers.IsEmpty() && params.IsEmpty() && cookies.IsEmpty() && a.MapQueryParams == nil
 	)
 
-	// 1. If Payload is not an object then check whether there are params,
-	// cookies or headers defined and if so return empty type (payload encoded
-	// in request params or headers) otherwise return payload type (payload
-	// encoded in request body).
+	// 1. If Payload is a union type, then the request body is a struct with
+	// two fields: the union type and its value.
+	if IsUnion(payload.Type) {
+		attr := UnionToObject(payload)
+		renameType(attr, name, suffix)
+		return attr
+	}
+
+	// 2. If Payload is not an object then check whether there are
+	// params, cookies or headers defined and if so return empty type
+	// (payload encoded in request params or headers) otherwise return
+	// payload type (payload encoded in request body).
 	if !IsObject(payload.Type) {
 		if bodyOnly {
 			payload = DupAtt(payload)
+			RemovePkgPath(payload)
 			renameType(payload, name, suffix)
 			return payload
 		}
 		return &AttributeExpr{Type: Empty}
 	}
 
-	// 2. Remove header, param and cookies attributes
+	// 3. Remove header, param and cookies attributes
 	body := NewMappedAttributeExpr(payload)
+	RemovePkgPath(body.AttributeExpr)
 	extendBodyAttribute(body)
 	removeAttributes(body, headers)
 	removeAttributes(body, cookies)
@@ -104,12 +175,12 @@ func httpRequestBody(a *HTTPEndpointExpr) *AttributeExpr {
 		removeAttribute(body, att)
 	}
 
-	// 3. Return empty type if no attribute left
+	// 4. Return empty type if no attribute left
 	if len(*AsObject(body.Type)) == 0 {
 		return &AttributeExpr{Type: Empty}
 	}
 
-	// 4. Build computed user type
+	// 5. Build computed user type
 	att := body.Attribute()
 	ut := &UserTypeExpr{
 		AttributeExpr: att,
@@ -117,6 +188,13 @@ func httpRequestBody(a *HTTPEndpointExpr) *AttributeExpr {
 		UID:           a.Service.Name() + "#" + a.Name(),
 	}
 	appendSuffix(ut.Attribute().Type, suffix)
+
+	// Remember openapi typename for example to generate friendly OpenAPI specs.
+	if t, ok := payload.Type.(UserType); ok {
+		if m, ok := t.Attribute().Meta["openapi:typename"]; ok {
+			ut.AttributeExpr.AddMeta("openapi:typename", m...)
+		}
+	}
 
 	return &AttributeExpr{
 		Type:         ut,
@@ -132,6 +210,11 @@ func httpStreamingBody(e *HTTPEndpointExpr) *AttributeExpr {
 		return nil
 	}
 	att := e.MethodExpr.StreamingPayload
+	if IsUnion(att.Type) {
+		attr := UnionToObject(att)
+		renameType(attr, e.Name(), "StreamingBody")
+		return attr
+	}
 	if !IsObject(att.Type) {
 		return DupAtt(att)
 	}
@@ -181,11 +264,16 @@ func buildHTTPResponseBody(name string, attr *AttributeExpr, resp *HTTPResponseE
 		return &AttributeExpr{Type: Empty}
 	}
 
-	// 0. Handle the case where the body is set explicitely in the design.
+	// 1. Handle the case where the body is set explicitly in the design.
 	// We need to create a type with an endpoint specific response body type
 	// name to handle the case where the same type is used by multiple
 	// methods with potentially different result types.
 	if resp.Body != nil {
+		if IsUnion(resp.Body.Type) {
+			attr := UnionToObject(resp.Body)
+			renameType(attr, name, suffix)
+			return attr
+		}
 		if !IsObject(resp.Body.Type) {
 			return resp.Body
 		}
@@ -197,41 +285,53 @@ func buildHTTPResponseBody(name string, attr *AttributeExpr, resp *HTTPResponseE
 		return att
 	}
 
-	// 1. If attribute is not an object then check whether there are headers or
+	// 2. Map unions to objects.
+	if IsUnion(attr.Type) {
+		attr = UnionToObject(attr)
+		renameType(attr, name, suffix)
+		return attr
+	}
+
+	// 3. If attribute is not an object then check whether there are headers or
 	// cookies defined and if so return empty type (attr encoded in response
 	// header or cookie) otherwise return renamed attr type (attr encoded in
 	// response body).
 	if !IsObject(attr.Type) {
 		if resp.Headers.IsEmpty() && resp.Cookies.IsEmpty() {
 			attr = DupAtt(attr)
+			RemovePkgPath(attr)
 			renameType(attr, name, "Response") // Do not use ResponseBody as it could clash with name of element
 			return attr
 		}
 		return &AttributeExpr{Type: Empty}
 	}
 	body := NewMappedAttributeExpr(attr)
+	RemovePkgPath(body.AttributeExpr)
 	extendBodyAttribute(body)
 
-	// 2. Remove header and cookie attributes
+	// 4. Remove header and cookie attributes
 	removeAttributes(body, resp.Headers)
 	removeAttributes(body, resp.Cookies)
 
-	// 3. Return empty type if no attribute left
+	// 5. Return empty type if no attribute left
 	if len(*AsObject(body.Type)) == 0 {
 		return &AttributeExpr{Type: Empty}
 	}
 
-	// 4. Build computed user type
+	// 6. Build computed user type
 	userType := &UserTypeExpr{
 		AttributeExpr: body.Attribute(),
 		TypeName:      name,
 		UID:           concat(svc.Name(), "#", name),
 	}
 
-	// Remember original type name for example to generate friendly OpenAPI
-	// specs.
+	// Remember original type name and openapi typename for example
+	// to generate friendly OpenAPI specs.
 	if t, ok := attr.Type.(UserType); ok {
 		userType.AttributeExpr.AddMeta("name:original", t.Name())
+		if m, ok := t.Attribute().Meta["openapi:typename"]; ok {
+			userType.AttributeExpr.AddMeta("openapi:typename", m...)
+		}
 	}
 
 	appendSuffix(userType.Attribute().Type, suffix)
@@ -286,7 +386,6 @@ func buildHTTPResponseBody(name string, attr *AttributeExpr, resp *HTTPResponseE
 // 3) If the first string is a single word or camelcased, the rest of the
 // strings are concatenated to form a valid upper camelcase.
 // e.g. concat("myEndpoint", "streaming", "Body") => "MyEndpointStreamingBody"
-//
 func concat(strs ...string) string {
 	if len(strs) == 1 {
 		return strs[0]
@@ -315,12 +414,12 @@ func concat(strs ...string) string {
 		}
 	case !isLower(name) && hasUnderscore(name):
 		for i := 1; i < len(strs); i++ {
-			name += "_" + strings.Title(strs[i])
+			name += "_" + Title(strs[i])
 		}
 	default:
-		name = strings.Title(name)
+		name = Title(name)
 		for i := 1; i < len(strs); i++ {
-			name += strings.Title(strs[i])
+			name += Title(strs[i])
 		}
 	}
 	return name
@@ -341,32 +440,25 @@ func renameType(att *AttributeExpr, name, suffix string) {
 	}
 }
 
-func appendSuffix(dt DataType, suffix string, seen ...map[string]struct{}) {
-	var s map[string]struct{}
-	if len(seen) > 0 {
-		s = seen[0]
-	} else {
-		s = make(map[string]struct{})
-		seen = append(seen, s)
-	}
-	switch actual := dt.(type) {
-	case UserType:
-		if _, ok := s[actual.ID()]; ok {
-			return
+// RemovePkgPath traverses the given data type and removes the "struct:pkg:path"
+// metadata from all the user type attributes.
+func RemovePkgPath(attr *AttributeExpr) {
+	walk(attr.Type, func(ut UserType) {
+		delete(ut.Attribute().Meta, "struct:pkg:path")
+	})
+	for _, pt := range attr.Bases {
+		if dt, ok := pt.(UserType); ok {
+			RemovePkgPath(dt.Attribute())
 		}
-		actual.Rename(actual.Name() + suffix)
-		s[actual.ID()] = struct{}{}
-		appendSuffix(actual.Attribute().Type, suffix, seen...)
-	case *Object:
-		for _, nat := range *actual {
-			appendSuffix(nat.Attribute.Type, suffix, seen...)
-		}
-	case *Array:
-		appendSuffix(actual.ElemType.Type, suffix, seen...)
-	case *Map:
-		appendSuffix(actual.KeyType.Type, suffix, seen...)
-		appendSuffix(actual.ElemType.Type, suffix, seen...)
 	}
+}
+
+// appendSuffix recursively traverses the given data type and appends the given
+// suffix to all the user type names.
+func appendSuffix(dt DataType, suffix string) {
+	walk(dt, func(ut UserType) {
+		ut.Rename(ut.Name() + suffix)
+	})
 }
 
 func removeAttributes(attr, sub *MappedAttributeExpr) {
@@ -382,7 +474,7 @@ func removeAttribute(attr *MappedAttributeExpr, name string) {
 		attr.Validation.RemoveRequired(name)
 	}
 	for _, ex := range attr.UserExamples {
-		if m, ok := ex.Value.(map[string]interface{}); ok {
+		if m, ok := ex.Value.(map[string]any); ok {
 			delete(m, name)
 		}
 	}
@@ -417,4 +509,35 @@ func extendBodyAttribute(body *MappedAttributeExpr) {
 	// unset bases so that they don't get added back to the body type during
 	// finalize
 	att.Bases = nil
+}
+
+// walk traverses the given data type and invokes the given function for each
+// user type it finds including dt itself.
+func walk(dt DataType, do func(UserType)) {
+	walkrec(dt, do, make(map[string]struct{}))
+}
+
+func walkrec(dt DataType, do func(UserType), seen map[string]struct{}) {
+	switch dt := dt.(type) {
+	case UserType:
+		if _, ok := seen[dt.ID()]; ok {
+			return
+		}
+		do(dt)
+		seen[dt.ID()] = struct{}{}
+		walkrec(dt.Attribute().Type, do, seen)
+	case *Object:
+		for _, nat := range *dt {
+			walkrec(nat.Attribute.Type, do, seen)
+		}
+	case *Array:
+		walkrec(dt.ElemType.Type, do, seen)
+	case *Map:
+		walkrec(dt.KeyType.Type, do, seen)
+		walkrec(dt.ElemType.Type, do, seen)
+	case *Union:
+		for _, nat := range dt.Values {
+			walkrec(nat.Attribute.Type, do, seen)
+		}
+	}
 }

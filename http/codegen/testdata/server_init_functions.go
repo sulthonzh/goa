@@ -12,7 +12,7 @@ func New(
 	decoder func(*http.Request) goahttp.Decoder,
 	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
 	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(err error) goahttp.Statuser,
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
@@ -37,7 +37,7 @@ func New(
 	decoder func(*http.Request) goahttp.Decoder,
 	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
 	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(err error) goahttp.Statuser,
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) *Server {
 	return &Server{
 		Mounts: []*MountPoint{
@@ -61,7 +61,7 @@ func New(
 	decoder func(*http.Request) goahttp.Decoder,
 	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
 	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(err error) goahttp.Statuser,
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
 	fileSystemPathToFile1JSON http.FileSystem,
 	fileSystemPathToFile2JSON http.FileSystem,
 	fileSystemPathToFile3JSON http.FileSystem,
@@ -100,7 +100,7 @@ func New(
 	decoder func(*http.Request) goahttp.Decoder,
 	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
 	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(err error) goahttp.Statuser,
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
 	fileSystemPathToFile1JSON http.FileSystem,
 	fileSystemPathToFile2JSON http.FileSystem,
 ) *Server {
@@ -137,7 +137,7 @@ func New(
 	decoder func(*http.Request) goahttp.Decoder,
 	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
 	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(err error) goahttp.Statuser,
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
 	serviceMultipartMethodMultiBasesDecoderFn ServiceMultipartMethodMultiBasesDecoderFunc,
 ) *Server {
 	return &Server{
@@ -161,7 +161,7 @@ func New(
 	decoder func(*http.Request) goahttp.Decoder,
 	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
 	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(err error) goahttp.Statuser,
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
 	upgrader goahttp.Upgrader,
 	configurer *ConnConfigurer,
 ) *Server {
@@ -235,7 +235,7 @@ func (s *Server) Mount(mux goahttp.Muxer) {
 var ServerMultipleFilesMounterCode = `// MountPathToFolder configures the mux to serve GET request made to "/".
 func MountPathToFolder(mux goahttp.Muxer, h http.Handler) {
 	mux.Handle("GET", "/", h.ServeHTTP)
-	mux.Handle("GET", "/*wildcard", h.ServeHTTP)
+	mux.Handle("GET", "/{*wildcard}", h.ServeHTTP)
 }
 `
 
@@ -243,7 +243,7 @@ var ServerMultipleFilesWithPrefixPathMounterCode = `// MountPathToFolder configu
 // "/server_file_server".
 func MountPathToFolder(mux goahttp.Muxer, h http.Handler) {
 	mux.Handle("GET", "/server_file_server/", h.ServeHTTP)
-	mux.Handle("GET", "/server_file_server/*wildcard", h.ServeHTTP)
+	mux.Handle("GET", "/server_file_server/{*wildcard}", h.ServeHTTP)
 }
 `
 

@@ -23,6 +23,12 @@ import (
 // Service accepts two arguments: the name of the service - which must be unique
 // in the design package - and its defining DSL.
 //
+// If the name of the service is not unique, then it will be merged will all
+// service definitions with matching names. Note that this allows you to
+// spread the definition of a single service across multiple files by simply
+// calling Service multiple times with the same name.
+//
+//
 // Example:
 //
 //    var _ = Service("divider", func() {
@@ -58,8 +64,12 @@ func Service(name string, fn func()) *expr.ServiceExpr {
 		return nil
 	}
 	if s := expr.Root.Service(name); s != nil {
-		eval.ReportError("service %#v is defined twice", name)
-		return nil
+		oldDSL := s.DSL()
+		s.DSLFunc = func() {
+			oldDSL()
+			fn()
+		}
+		return s
 	}
 	s := &expr.ServiceExpr{Name: name, DSLFunc: fn}
 	expr.Root.Services = append(expr.Root.Services, s)

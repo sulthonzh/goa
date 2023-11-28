@@ -32,11 +32,12 @@ var (
 	tempty  typ
 	tstring = typ{Type: "string"}
 	tuuid   = typ{Type: "string", Format: "uuid"}
+	tbinary = typ{Type: "string", Format: "binary"}
 	tint    = typ{Type: "integer"}
 	tarray  = typ{Type: "array"}
 )
 
-func tobj(attrs ...interface{}) typ {
+func tobj(attrs ...any) typ {
 	res := typ{Type: "object"}
 	if len(attrs) == 0 {
 		res.SkipProps = true
@@ -45,6 +46,10 @@ func tobj(attrs ...interface{}) typ {
 		res.Props = append(res.Props, attr{Name: attrs[i].(string), Val: attrs[i+1].(typ)})
 	}
 	return res
+}
+
+func tmap() typ {
+	return typ{Type: "object", Props: []attr{{Name: "map", Val: typ{Type: "object"}}}}
 }
 
 func (tt typ) Prop(n string) (typ, bool) {
@@ -66,6 +71,7 @@ func TestBuildBodyTypes(t *testing.T) {
 		ExpectedType          typ
 		ExpectedFormat        string
 		ExpectedResponseTypes rt
+		ExpectedExtraTypes    map[string]typ
 	}{{
 		Name: "string_body",
 		DSL:  dsls.StringBodyDSL(svcName, "string_body"),
@@ -83,6 +89,12 @@ func TestBuildBodyTypes(t *testing.T) {
 		DSL:  dsls.ObjectBodyDSL(svcName, "object_body"),
 
 		ExpectedType:          tobj("name", tstring, "age", tint),
+		ExpectedResponseTypes: rt{204: tempty},
+	}, {
+		Name: "map_body",
+		DSL:  dsls.MapBodyDSL(svcName, "map_body"),
+
+		ExpectedType:          tmap(),
 		ExpectedResponseTypes: rt{204: tempty},
 	}, {
 		Name: "streaming_string_body",
@@ -109,6 +121,12 @@ func TestBuildBodyTypes(t *testing.T) {
 		ExpectedType:          tempty,
 		ExpectedResponseTypes: rt{200: tobj("name", tstring, "age", tint)},
 	}, {
+		Name: "multi_cookie_response_body",
+		DSL:  dsls.MultiCookieResponseBodyDSL(svcName, "multi_cookie_response_body"),
+
+		ExpectedType:          tempty,
+		ExpectedResponseTypes: rt{200: tobj("name", tstring)},
+	}, {
 		Name: "string_streaming_response_body",
 		DSL:  dsls.StringStreamingResponseBodyDSL(svcName, "string_streaming_response_body"),
 
@@ -132,6 +150,20 @@ func TestBuildBodyTypes(t *testing.T) {
 
 		ExpectedType:          tempty,
 		ExpectedResponseTypes: rt{204: tempty, 400: tobj("name", tstring, "age", tint)},
+	}, {
+		Name: "forced_type",
+		DSL:  dsls.ForcedTypeDSL(svcName, "forced_type"),
+
+		ExpectedType:          tempty,
+		ExpectedResponseTypes: rt{204: tempty},
+		ExpectedExtraTypes:    map[string]typ{"Forced": tobj("foo", tstring)},
+	}, {
+		Name: "forced_result_type",
+		DSL:  dsls.ForcedResultTypeDSL(svcName, "forced_result_type"),
+
+		ExpectedType:          tempty,
+		ExpectedResponseTypes: rt{204: tempty},
+		ExpectedExtraTypes:    map[string]typ{"Forced": tobj("foo", tstring)},
 	}}
 
 	for _, c := range cases {
@@ -169,6 +201,14 @@ func TestBuildBodyTypes(t *testing.T) {
 					return
 				}
 				matchesSchema(t, "response", met.ResponseBodies[s][0], types, r)
+			}
+			for name, forced := range c.ExpectedExtraTypes {
+				got, ok := types[name]
+				if !ok {
+					t.Errorf("missing forced type %q", name)
+					continue
+				}
+				matchesSchema(t, "extra type", got, types, forced)
 			}
 		})
 	}
@@ -278,7 +318,7 @@ func TestHashAttribute(t *testing.T) {
 
 func newObj(n string, t expr.DataType, req bool) *expr.AttributeExpr {
 	attr := &expr.AttributeExpr{
-		Type:       &expr.Object{{n, &expr.AttributeExpr{Type: t}}},
+		Type:       &expr.Object{{Name: n, Attribute: &expr.AttributeExpr{Type: t}}},
 		Validation: &expr.ValidationExpr{},
 	}
 	if req {
@@ -290,8 +330,8 @@ func newObj(n string, t expr.DataType, req bool) *expr.AttributeExpr {
 func newObj2(n, o string, t, u expr.DataType, reqs ...string) *expr.AttributeExpr {
 	attr := &expr.AttributeExpr{
 		Type: &expr.Object{
-			{n, &expr.AttributeExpr{Type: t}},
-			{o, &expr.AttributeExpr{Type: u}},
+			{Name: n, Attribute: &expr.AttributeExpr{Type: t}},
+			{Name: o, Attribute: &expr.AttributeExpr{Type: u}},
 		},
 		Validation: &expr.ValidationExpr{},
 	}

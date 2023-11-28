@@ -148,7 +148,7 @@ func endpointParser(genpkg string, root *expr.RootExpr, svr *expr.ServerExpr, da
 				cli.FlagsCode(cliData),
 				data,
 			},
-			FuncMap: map[string]interface{}{"streamingCmdExists": streamingCmdExists},
+			FuncMap: map[string]any{"streamingCmdExists": streamingCmdExists},
 		},
 	}
 	for _, cmd := range cliData {
@@ -174,6 +174,7 @@ func payloadBuilders(genpkg string, svc *expr.HTTPServiceExpr, data *cli.Command
 		codegen.GoaNamedImport("http", "goahttp"),
 		{Path: genpkg + "/" + sd.Service.PathName, Name: sd.Service.PkgName},
 	}
+	specs = append(specs, sd.Service.UserTypeImports...)
 	sections := []*codegen.SectionTemplate{
 		codegen.Header(title, "client", specs),
 	}
@@ -234,7 +235,7 @@ func makeFlags(e *EndpointData, args []*InitArgData, payload expr.DataType) ([]*
 		if arg.FieldName == "" && arg.VarName != "body" {
 			continue
 		}
-		code, chek := cli.FieldLoadCode(f, arg.VarName, arg.TypeName, arg.Validate, arg.DefaultValue, payload)
+		code, chek := cli.FieldLoadCode(f, arg.VarName, arg.TypeName, arg.Validate, arg.DefaultValue, payload, e.Payload.Ref)
 		check = check || chek
 		tn := arg.TypeRef
 		if f.Type == "JSON" {
@@ -314,10 +315,10 @@ func ParseEndpoint(
 		{{- end }}
 	{{- end }}
 	{{- end }}
-) (goa.Endpoint, interface{}, error) {
+) (goa.Endpoint, any, error) {
 	{{ .FlagsCode }}
     var (
-		data     interface{}
+		data     any
 		endpoint goa.Endpoint
 		err      error
 	)

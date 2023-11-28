@@ -92,7 +92,7 @@ func TestDesignType(t *testing.T) {
 	var f bool
 	cases := []struct {
 		Name         string
-		From         interface{}
+		From         any
 		ExpectedType expr.DataType
 		ExpectedErr  string
 	}{
@@ -138,10 +138,8 @@ func TestDesignType(t *testing.T) {
 				if err == nil {
 					// but got none
 					t.Errorf("got no error, expected %q", c.ExpectedErr)
-				} else {
-					if err.Error() != c.ExpectedErr {
-						t.Errorf("got error %q, expected %q", err, c.ExpectedErr)
-					}
+				} else if err.Error() != c.ExpectedErr {
+					t.Errorf("got error %q, expected %q", err, c.ExpectedErr)
 				}
 			}
 		})
@@ -151,7 +149,7 @@ func TestCompatible(t *testing.T) {
 	cases := []struct {
 		Name        string
 		From        expr.DataType
-		To          interface{}
+		To          any
 		ExpectedErr string
 	}{
 		{"bool", expr.Boolean, false, ""},
@@ -167,7 +165,7 @@ func TestCompatible(t *testing.T) {
 		{"bytes", expr.Bytes, []byte{}, ""},
 		{"array", dsl.ArrayOf(expr.String), []string{}, ""},
 		{"map", dsl.MapOf(expr.String, expr.String), map[string]string{}, ""},
-		{"map-interface", dsl.MapOf(expr.String, expr.Any), map[string]interface{}{}, ""},
+		{"map-interface", dsl.MapOf(expr.String, expr.Any), map[string]any{}, ""},
 		{"object", obj, objT{}, ""},
 		{"object-mapped", objMapped, objT{}, ""},
 		{"object-ignored", objIgnored, objT{}, ""},
@@ -198,10 +196,8 @@ func TestCompatible(t *testing.T) {
 			} else {
 				if c.ExpectedErr == "" {
 					t.Errorf("got error %q, expected none", err)
-				} else {
-					if err.Error() != c.ExpectedErr {
-						t.Errorf("got error %q, expected %q", err, c.ExpectedErr)
-					}
+				} else if err.Error() != c.ExpectedErr {
+					t.Errorf("got error %q, expected %q", err, c.ExpectedErr)
 				}
 			}
 		})
@@ -287,7 +283,9 @@ func runDSL(t *testing.T, dsl func()) *expr.RootExpr {
 	Services = make(ServicesData)
 	eval.Reset()
 	expr.Root = new(expr.RootExpr)
-	eval.Register(expr.Root)
+	if err := eval.Register(expr.Root); err != nil {
+		t.Fatal(err)
+	}
 	expr.Root.API = expr.NewAPIExpr("test api", func() {})
 	expr.Root.API.Servers = []*expr.ServerExpr{expr.Root.API.DefaultServer()}
 
@@ -310,11 +308,11 @@ func runDSL(t *testing.T, dsl func()) *expr.RootExpr {
 var obj = &expr.UserTypeExpr{
 	AttributeExpr: &expr.AttributeExpr{
 		Type: &expr.Object{
-			{"Foo", &expr.AttributeExpr{Type: expr.String}},
-			{"Bar", &expr.AttributeExpr{Type: expr.Int}},
-			{"Baz", &expr.AttributeExpr{Type: expr.Boolean}},
-			{"Goo", &expr.AttributeExpr{Type: expr.Float32}},
-			{"Goo2", &expr.AttributeExpr{Type: expr.UInt}},
+			{Name: "Foo", Attribute: &expr.AttributeExpr{Type: expr.String}},
+			{Name: "Bar", Attribute: &expr.AttributeExpr{Type: expr.Int}},
+			{Name: "Baz", Attribute: &expr.AttributeExpr{Type: expr.Boolean}},
+			{Name: "Goo", Attribute: &expr.AttributeExpr{Type: expr.Float32}},
+			{Name: "Goo2", Attribute: &expr.AttributeExpr{Type: expr.UInt}},
 		},
 	},
 	TypeName: "objT",
@@ -323,9 +321,10 @@ var obj = &expr.UserTypeExpr{
 var objMapped = &expr.UserTypeExpr{
 	AttributeExpr: &expr.AttributeExpr{
 		Type: &expr.Object{
-			{"Foo", &expr.AttributeExpr{Type: expr.String}},
-			{"Bar", &expr.AttributeExpr{Type: expr.Int}},
-			{"mapped", &expr.AttributeExpr{Type: expr.Boolean, Meta: expr.MetaExpr{"struct.field.external": []string{"Baz"}}}},
+			{Name: "Foo", Attribute: &expr.AttributeExpr{Type: expr.String}},
+			{Name: "Bar", Attribute: &expr.AttributeExpr{Type: expr.Int}},
+			{Name: "mapped", Attribute: &expr.AttributeExpr{Type: expr.Boolean, Meta: expr.MetaExpr{"struct:field:external": []string{"Baz"}}}},
+			{Name: "mapped (deprecated syntax)", Attribute: &expr.AttributeExpr{Type: expr.Boolean, Meta: expr.MetaExpr{"struct.field.external": []string{"Baz"}}}},
 		},
 	},
 	TypeName: "objT",
@@ -334,9 +333,10 @@ var objMapped = &expr.UserTypeExpr{
 var objIgnored = &expr.UserTypeExpr{
 	AttributeExpr: &expr.AttributeExpr{
 		Type: &expr.Object{
-			{"Foo", &expr.AttributeExpr{Type: expr.String}},
-			{"Bar", &expr.AttributeExpr{Type: expr.Int}},
-			{"ignored", &expr.AttributeExpr{Type: expr.Boolean, Meta: expr.MetaExpr{"struct.field.external": []string{"-"}}}},
+			{Name: "Foo", Attribute: &expr.AttributeExpr{Type: expr.String}},
+			{Name: "Bar", Attribute: &expr.AttributeExpr{Type: expr.Int}},
+			{Name: "ignored", Attribute: &expr.AttributeExpr{Type: expr.Boolean, Meta: expr.MetaExpr{"struct:field:external": []string{"-"}}}},
+			{Name: "ignored (deprecated syntax)", Attribute: &expr.AttributeExpr{Type: expr.Boolean, Meta: expr.MetaExpr{"struct.field.external": []string{"-"}}}},
 		},
 	},
 	TypeName: "objT",
@@ -346,8 +346,8 @@ func objRecursive() *expr.UserTypeExpr {
 	res := &expr.UserTypeExpr{
 		AttributeExpr: &expr.AttributeExpr{
 			Type: &expr.Object{
-				{"Foo", &expr.AttributeExpr{Type: expr.String}},
-				{"Bar", &expr.AttributeExpr{Type: expr.Int}},
+				{Name: "Foo", Attribute: &expr.AttributeExpr{Type: expr.String}},
+				{Name: "Bar", Attribute: &expr.AttributeExpr{Type: expr.Int}},
 			},
 		},
 		TypeName: "objRecursiveT",

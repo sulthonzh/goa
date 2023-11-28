@@ -3,7 +3,7 @@ package testdata
 const PathStringRequestBuildCode = `// BuildMethodPathStringRequest instantiates a HTTP request object with method
 // and path set to call the "ServicePathString" service "MethodPathString"
 // endpoint
-func (c *Client) BuildMethodPathStringRequest(ctx context.Context, v interface{}) (*http.Request, error) {
+func (c *Client) BuildMethodPathStringRequest(ctx context.Context, v any) (*http.Request, error) {
 	var (
 		p string
 	)
@@ -32,7 +32,7 @@ func (c *Client) BuildMethodPathStringRequest(ctx context.Context, v interface{}
 const PathStringRequiredRequestBuildCode = `// BuildMethodPathStringValidateRequest instantiates a HTTP request object with
 // method and path set to call the "ServicePathStringValidate" service
 // "MethodPathStringValidate" endpoint
-func (c *Client) BuildMethodPathStringValidateRequest(ctx context.Context, v interface{}) (*http.Request, error) {
+func (c *Client) BuildMethodPathStringValidateRequest(ctx context.Context, v any) (*http.Request, error) {
 	var (
 		p string
 	)
@@ -59,7 +59,7 @@ func (c *Client) BuildMethodPathStringValidateRequest(ctx context.Context, v int
 const PathStringDefaultRequestBuildCode = `// BuildMethodPathStringDefaultRequest instantiates a HTTP request object with
 // method and path set to call the "ServicePathStringDefault" service
 // "MethodPathStringDefault" endpoint
-func (c *Client) BuildMethodPathStringDefaultRequest(ctx context.Context, v interface{}) (*http.Request, error) {
+func (c *Client) BuildMethodPathStringDefaultRequest(ctx context.Context, v any) (*http.Request, error) {
 	var (
 		p string
 	)
@@ -74,6 +74,35 @@ func (c *Client) BuildMethodPathStringDefaultRequest(ctx context.Context, v inte
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, goahttp.ErrInvalidURL("ServicePathStringDefault", "MethodPathStringDefault", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+`
+
+const PathObjectRequestBuildCode = `// BuildMethodPathObjectRequest instantiates a HTTP request object with method
+// and path set to call the "ServicePathObject" service "MethodPathObject"
+// endpoint
+func (c *Client) BuildMethodPathObjectRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		id string
+	)
+	{
+		p, ok := v.(*servicepathobject.MethodPathObjectPayload)
+		if !ok {
+			return nil, goahttp.ErrInvalidType("ServicePathObject", "MethodPathObject", "*servicepathobject.MethodPathObjectPayload", v)
+		}
+		if p.ID != nil {
+			id = *p.ID
+		}
+	}
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MethodPathObjectServicePathObjectPath(id)}
+	req, err := http.NewRequest("PUT", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("ServicePathObject", "MethodPathObject", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)

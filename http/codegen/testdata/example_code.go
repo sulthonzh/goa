@@ -59,7 +59,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 
 	// Start HTTP server using default configuration, change the code to
 	// configure the server as required by your service.
-	srv := &http.Server{Addr: u.Host, Handler: handler}
+	srv := &http.Server{Addr: u.Host, Handler: handler, ReadHeaderTimeout: time.Second * 60}
 	for _, m := range serviceServer.Mounts {
 		logger.Printf("HTTP %q mounted on %s %s", m.Method, m.Verb, m.Pattern)
 	}
@@ -81,7 +81,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		_ = srv.Shutdown(ctx)
+		err := srv.Shutdown(ctx)
+		if err != nil {
+			logger.Printf("failed to shutdown: %v", err)
+		}
 	}()
 }
 
@@ -155,7 +158,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, wg *sync.WaitGroup, errc 
 
 	// Start HTTP server using default configuration, change the code to
 	// configure the server as required by your service.
-	srv := &http.Server{Addr: u.Host, Handler: handler}
+	srv := &http.Server{Addr: u.Host, Handler: handler, ReadHeaderTimeout: time.Second * 60}
 	for _, m := range serviceServer.Mounts {
 		logger.Printf("HTTP %q mounted on %s %s", m.Method, m.Verb, m.Pattern)
 	}
@@ -177,7 +180,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, wg *sync.WaitGroup, errc 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		_ = srv.Shutdown(ctx)
+		err := srv.Shutdown(ctx)
+		if err != nil {
+			logger.Printf("failed to shutdown: %v", err)
+		}
 	}()
 }
 
@@ -251,7 +257,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 
 	// Start HTTP server using default configuration, change the code to
 	// configure the server as required by your service.
-	srv := &http.Server{Addr: u.Host, Handler: handler}
+	srv := &http.Server{Addr: u.Host, Handler: handler, ReadHeaderTimeout: time.Second * 60}
 	for _, m := range serviceServer.Mounts {
 		logger.Printf("HTTP %q mounted on %s %s", m.Method, m.Verb, m.Pattern)
 	}
@@ -273,7 +279,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		_ = srv.Shutdown(ctx)
+		err := srv.Shutdown(ctx)
+		if err != nil {
+			logger.Printf("failed to shutdown: %v", err)
+		}
 	}()
 }
 
@@ -351,7 +360,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 
 	// Start HTTP server using default configuration, change the code to
 	// configure the server as required by your service.
-	srv := &http.Server{Addr: u.Host, Handler: handler}
+	srv := &http.Server{Addr: u.Host, Handler: handler, ReadHeaderTimeout: time.Second * 60}
 	for _, m := range serviceServer.Mounts {
 		logger.Printf("HTTP %q mounted on %s %s", m.Method, m.Verb, m.Pattern)
 	}
@@ -376,7 +385,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, serviceEndpoints *service
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		_ = srv.Shutdown(ctx)
+		err := srv.Shutdown(ctx)
+		if err != nil {
+			logger.Printf("failed to shutdown: %v", err)
+		}
 	}()
 }
 
@@ -455,7 +467,7 @@ func handleHTTPServer(ctx context.Context, u *url.URL, streamingServiceAEndpoint
 
 	// Start HTTP server using default configuration, change the code to
 	// configure the server as required by your service.
-	srv := &http.Server{Addr: u.Host, Handler: handler}
+	srv := &http.Server{Addr: u.Host, Handler: handler, ReadHeaderTimeout: time.Second * 60}
 	for _, m := range streamingServiceAServer.Mounts {
 		logger.Printf("HTTP %q mounted on %s %s", m.Method, m.Verb, m.Pattern)
 	}
@@ -480,7 +492,10 @@ func handleHTTPServer(ctx context.Context, u *url.URL, streamingServiceAEndpoint
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		_ = srv.Shutdown(ctx)
+		err := srv.Shutdown(ctx)
+		if err != nil {
+			logger.Printf("failed to shutdown: %v", err)
+		}
 	}()
 }
 
@@ -496,7 +511,7 @@ func errorHandler(logger *log.Logger) func(context.Context, http.ResponseWriter,
 }
 `
 
-	ExampleCLICode = `func doHTTP(scheme, host string, timeout int, debug bool) (goa.Endpoint, interface{}, error) {
+	ExampleCLICode = `func doHTTP(scheme, host string, timeout int, debug bool) (goa.Endpoint, any, error) {
 	var (
 		doer goahttp.Doer
 	)
@@ -526,7 +541,7 @@ func httpUsageExamples() string {
 }
 `
 
-	StreamingExampleCLICode = `func doHTTP(scheme, host string, timeout int, debug bool) (goa.Endpoint, interface{}, error) {
+	StreamingExampleCLICode = `func doHTTP(scheme, host string, timeout int, debug bool) (goa.Endpoint, any, error) {
 	var (
 		doer goahttp.Doer
 	)
@@ -565,7 +580,7 @@ func httpUsageExamples() string {
 }
 `
 
-	StreamingMultipleServicesExampleCLICode = `func doHTTP(scheme, host string, timeout int, debug bool) (goa.Endpoint, interface{}, error) {
+	StreamingMultipleServicesExampleCLICode = `func doHTTP(scheme, host string, timeout int, debug bool) (goa.Endpoint, any, error) {
 	var (
 		doer goahttp.Doer
 	)

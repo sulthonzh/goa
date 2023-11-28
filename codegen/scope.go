@@ -96,6 +96,16 @@ func (s *NameScope) Name(name string) string {
 // useDefault if true indicates that the attribute must not be a pointer
 // if it has a default value.
 func (s *NameScope) GoTypeDef(att *expr.AttributeExpr, ptr, useDefault bool) string {
+	pkg := ""
+	if loc := UserTypeLocation(att.Type); loc != nil {
+		pkg = loc.PackageName()
+	} else if p, ok := att.Meta.Last("struct:pkg:path"); ok && p != "" {
+		pkg = p
+	}
+	return s.goTypeDef(att, ptr, useDefault, pkg)
+}
+
+func (s *NameScope) goTypeDef(att *expr.AttributeExpr, ptr, useDefault bool, pkg string) string {
 	switch actual := att.Type.(type) {
 	case expr.Primitive:
 		if t, _ := GetMetaType(att); t != "" {
@@ -103,24 +113,25 @@ func (s *NameScope) GoTypeDef(att *expr.AttributeExpr, ptr, useDefault bool) str
 		}
 		return GoNativeTypeName(actual)
 	case *expr.Array:
-		d := s.GoTypeDef(actual.ElemType, ptr, useDefault)
+		d := s.goTypeDef(actual.ElemType, ptr, useDefault, pkg)
 		if expr.IsObject(actual.ElemType.Type) {
 			d = "*" + d
 		}
 		return "[]" + d
 	case *expr.Map:
-		keyDef := s.GoTypeDef(actual.KeyType, ptr, useDefault)
+		keyDef := s.goTypeDef(actual.KeyType, ptr, useDefault, pkg)
 		if expr.IsObject(actual.KeyType.Type) {
 			keyDef = "*" + keyDef
 		}
-		elemDef := s.GoTypeDef(actual.ElemType, ptr, useDefault)
+		elemDef := s.goTypeDef(actual.ElemType, ptr, useDefault, pkg)
 		if expr.IsObject(actual.ElemType.Type) {
 			elemDef = "*" + elemDef
 		}
 		return fmt.Sprintf("map[%s]%s", keyDef, elemDef)
+	case *expr.Union:
+		return fmt.Sprintf("interface{\n\t%s()\n}", UnionValTypeName(actual.TypeName))
 	case *expr.Object:
-		var ss []string
-		ss = append(ss, "struct {")
+		ss := []string{"struct {"}
 		for _, nat := range *actual {
 			var (
 				fn   string
@@ -133,7 +144,7 @@ func (s *NameScope) GoTypeDef(att *expr.AttributeExpr, ptr, useDefault bool) str
 			)
 			{
 				fn = GoifyAtt(at, name, true)
-				tdef = s.GoTypeDef(at, ptr, useDefault)
+				tdef = s.goTypeDef(at, ptr, useDefault, pkg)
 				if expr.IsObject(at.Type) ||
 					att.IsPrimitivePointer(name, useDefault) ||
 					(ptr && expr.IsPrimitive(at.Type) && at.Type.Kind() != expr.AnyKind && at.Type.Kind() != expr.BytesKind) {
@@ -149,7 +160,14 @@ func (s *NameScope) GoTypeDef(att *expr.AttributeExpr, ptr, useDefault bool) str
 		ss = append(ss, "}")
 		return strings.Join(ss, "\n")
 	case expr.UserType:
-		return s.GoTypeName(att)
+		if actual == expr.Empty {
+			return "struct {}"
+		}
+		var prefix string
+		if loc := UserTypeLocation(actual); loc != nil && loc.PackageName() != pkg {
+			prefix = loc.PackageName() + "."
+		}
+		return prefix + s.GoTypeName(att)
 	default:
 		panic(fmt.Sprintf("unknown data type %T", actual)) // bug
 	}
@@ -157,7 +175,7 @@ func (s *NameScope) GoTypeDef(att *expr.AttributeExpr, ptr, useDefault bool) str
 
 // GoVar returns the Go code that returns the address of a variable of the Go type
 // which matches the given attribute type.
-func (s *NameScope) GoVar(varName string, dt expr.DataType) string {
+func (*NameScope) GoVar(varName string, dt expr.DataType) string {
 	// For a raw struct, no need to indirecting
 	if isRawStruct(dt) {
 		return varName
@@ -216,14 +234,14 @@ func (s *NameScope) GoFullTypeName(att *expr.AttributeExpr, pkg string) string {
 		}
 		return GoNativeTypeName(actual)
 	case *expr.Array:
-		return "[]" + s.GoFullTypeRef(actual.ElemType, pkg)
+		return "[]" + s.GoFullTypeRef(actual.ElemType, pkgWithDefault(actual.ElemType.Type, pkg))
 	case *expr.Map:
 		return fmt.Sprintf("map[%s]%s",
-			s.GoFullTypeRef(actual.KeyType, pkg),
-			s.GoFullTypeRef(actual.ElemType, pkg))
+			s.GoFullTypeRef(actual.KeyType, pkgWithDefault(actual.KeyType.Type, pkg)),
+			s.GoFullTypeRef(actual.ElemType, pkgWithDefault(actual.ElemType.Type, pkg)))
 	case *expr.Object:
 		return s.GoTypeDef(att, false, false)
-	case expr.UserType:
+	case expr.UserType, *expr.Union:
 		if actual == expr.ErrorResult {
 			return "goa.ServiceError"
 		}
@@ -233,10 +251,20 @@ func (s *NameScope) GoFullTypeName(att *expr.AttributeExpr, pkg string) string {
 		}
 		return pkg + "." + n
 	case expr.CompositeExpr:
-		return s.GoFullTypeName(actual.Attribute(), pkg)
+		return s.GoFullTypeName(actual.Attribute(), pkgWithDefault(actual.Attribute().Type, pkg))
 	default:
 		panic(fmt.Sprintf("unknown data type %T", actual)) // bug
 	}
+}
+
+// pkgWithDefault returns the package defining the given type. If the types is a
+// user type with "struct:pkg:path" metadata then it returns the corresponding
+// value, otherwise it returns pkg.
+func pkgWithDefault(dt expr.DataType, pkg string) string {
+	if loc := UserTypeLocation(dt); loc != nil {
+		return loc.PackageName()
+	}
+	return pkg
 }
 
 func goTypeRef(name string, dt expr.DataType) string {
@@ -252,6 +280,9 @@ func isRawStruct(dt expr.DataType) bool {
 		return true
 	}
 	if expr.IsObject(dt) {
+		return false
+	}
+	if expr.IsUnion(dt) {
 		return false
 	}
 	return true

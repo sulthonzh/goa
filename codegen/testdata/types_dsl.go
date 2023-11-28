@@ -1,6 +1,10 @@
 package testdata
 
-import . "goa.design/goa/v3/dsl"
+import (
+	"encoding/json"
+
+	. "goa.design/goa/v3/dsl"
+)
 
 var TestTypesDSL = func() {
 	var (
@@ -191,6 +195,10 @@ var TestTypesDSL = func() {
 			Attribute("int", Int, func() {
 				Default(100)
 			})
+			Attribute("raw_json", func() {
+				Meta("struct:field:type", "json.RawMessage", "json")
+				Default(json.RawMessage("foo"))
+			})
 			Attribute("required_int", Int, func() {
 				Default(99)
 			})
@@ -251,6 +259,44 @@ var TestTypesDSL = func() {
 
 		_ = Type("ArrayMapAlias", func() {
 			Attribute("array_map", ArrayMapAlias)
+		})
+
+		SimpleOneOf = Type("SimpleOneOf", func() {
+			OneOf("SimpleOneOf", func() {
+				Attribute("string", String)
+				Attribute("integer", Int)
+			})
+		})
+
+		_ = Type("EmbeddedOneOf", func() {
+			Attribute("string", String)
+			OneOf("EmbeddedOneOf", func() {
+				Attribute("string", String)
+				Attribute("integer", Int)
+				Attribute("boolean", Boolean)
+				Attribute("number", Int)
+				Attribute("array", ArrayOf(String))
+				Attribute("map", MapOf(String, String))
+				Attribute("user_type", SimpleOneOf)
+			})
+		})
+
+		_ = Type("RecursiveOneOf", func() {
+			Attribute("string", String)
+			OneOf("RecursiveOneOf", func() {
+				Attribute("integer", Int)
+				Attribute("recurse", "RecursiveOneOf")
+			})
+		})
+
+		WithOverride = Type("WithOverride", func() {
+			Attribute("string", String)
+			Meta("struct:pkg:path", "types")
+		})
+
+		_ = Type("CompositePkgOverride", func() {
+			Attribute("withOverride", WithOverride)
+			Meta("struct:pkg:path", "types")
 		})
 	)
 }

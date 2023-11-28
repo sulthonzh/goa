@@ -7,19 +7,30 @@ import (
 	"goa.design/goa/v3/expr"
 )
 
-// ExtensionsFromExpr generates swagger extensions from the given meta
+// ExtensionsFromExpr generates openapi extensions from the given meta
 // expression.
-func ExtensionsFromExpr(mdata expr.MetaExpr) map[string]interface{} {
-	return extensionsFromExprWithPrefix(mdata, "swagger:extension:")
+func ExtensionsFromExpr(mdata expr.MetaExpr) map[string]any {
+	swag := extensionsFromExprWithPrefix(mdata, "swagger:extension:")
+	open := extensionsFromExprWithPrefix(mdata, "openapi:extension:")
+	if swag == nil {
+		return open
+	}
+	if open == nil {
+		return swag
+	}
+	for k, v := range open {
+		swag[k] = v
+	}
+	return swag
 }
 
-// extensionsFromExprWithPrefix generates swagger extensions from
+// extensionsFromExprWithPrefix generates openapi extensions from
 // the given meta expression with keys starting the given prefix.
-func extensionsFromExprWithPrefix(mdata expr.MetaExpr, prefix string) map[string]interface{} {
+func extensionsFromExprWithPrefix(mdata expr.MetaExpr, prefix string) map[string]any {
 	if !strings.HasSuffix(prefix, ":") {
 		prefix += ":"
 	}
-	extensions := make(map[string]interface{})
+	extensions := make(map[string]any)
 	for key, value := range mdata {
 		if !strings.HasPrefix(key, prefix) {
 			continue
@@ -32,7 +43,7 @@ func extensionsFromExprWithPrefix(mdata expr.MetaExpr, prefix string) map[string
 			continue
 		}
 		val := value[0]
-		ival := interface{}(val)
+		ival := any(val)
 		if err := json.Unmarshal([]byte(val), &ival); err != nil {
 			extensions[name] = val
 			continue

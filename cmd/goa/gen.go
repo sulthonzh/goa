@@ -6,7 +6,6 @@ import (
 	"go/build"
 	"go/parser"
 	"go/token"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -60,11 +59,14 @@ func NewGenerator(cmd string, path, output string) *Generator {
 		fset := token.NewFileSet()
 		p := regexp.MustCompile(`goa.design/goa/v(\d+)/dsl`)
 		for _, pkg := range pkgs {
-			if _, err := os.Stat(filepath.Join(pkg.Module.Dir, "vendor")); !os.IsNotExist(err) {
-				hasVendorDirectory = true
+			// Nil check in case packages.Load can't get module info
+			if pkg.Module != nil {
+				if _, err := os.Stat(filepath.Join(pkg.Module.Dir, "vendor")); !os.IsNotExist(err) {
+					hasVendorDirectory = true
+				}
 			}
 			for _, gof := range pkg.GoFiles {
-				if bs, err := ioutil.ReadFile(gof); err == nil {
+				if bs, err := os.ReadFile(gof); err == nil {
 					if f, err := parser.ParseFile(fset, "", string(bs), parser.ImportsOnly); err == nil {
 						for _, s := range f.Imports {
 							matches := p.FindStringSubmatch(s.Path.Value)
@@ -96,14 +98,14 @@ func NewGenerator(cmd string, path, output string) *Generator {
 }
 
 // Write writes the main file.
-func (g *Generator) Write(debug bool) error {
+func (g *Generator) Write(_ bool) error {
 	var tmpDir string
 	{
 		wd := "."
 		if cwd, err := os.Getwd(); err != nil {
 			wd = cwd
 		}
-		tmp, err := ioutil.TempDir(wd, "goa")
+		tmp, err := os.MkdirTemp(wd, "goa")
 		if err != nil {
 			return err
 		}
@@ -113,7 +115,7 @@ func (g *Generator) Write(debug bool) error {
 
 	var sections []*codegen.SectionTemplate
 	{
-		data := map[string]interface{}{
+		data := map[string]any{
 			"Command":       g.Command,
 			"CleanupDirs":   cleanupDirs(g.Command, g.Output),
 			"DesignVersion": g.DesignVersion,
@@ -261,12 +263,18 @@ func cleanupDirs(cmd, output string) []string {
 		if err != nil {
 			return nil
 		}
-		defer gendir.Close()
+		defer func() {
+			err := gendir.Close()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to close gendir: %s", err)
+			}
+		}()
 		finfos, err := gendir.Readdir(-1)
 		if err != nil {
 			return []string{gendirPath}
 		}
-		dirs := []string{}
+		var dirs []string
+
 		for _, fi := range finfos {
 			if fi.IsDir() {
 				dirs = append(dirs, filepath.Join(gendirPath, fi.Name()))
@@ -328,7 +336,7 @@ const mainT = `func main() {
 	fmt.Println(strings.Join(outputs, "\n"))
 }
 
-func fail(msg string, vals ...interface{}) {
+func fail(msg string, vals ...any) {
 	fmt.Fprintf(os.Stderr, msg, vals...)
 	os.Exit(1)
 }

@@ -13,7 +13,7 @@ const (
 )
 
 // ClientFile returns the client file for the given service.
-func ClientFile(service *expr.ServiceExpr) *codegen.File {
+func ClientFile(_ string, service *expr.ServiceExpr) *codegen.File {
 	svc := Services.Get(service.Name)
 	data := endpointData(service)
 	path := filepath.Join(codegen.Gendir, svc.PathName, "client.go")
@@ -21,12 +21,13 @@ func ClientFile(service *expr.ServiceExpr) *codegen.File {
 		sections []*codegen.SectionTemplate
 	)
 	{
-		header := codegen.Header(service.Name+" client", svc.PkgName,
-			[]*codegen.ImportSpec{
-				{Path: "context"},
-				{Path: "io"},
-				codegen.GoaImport(""),
-			})
+		imports := []*codegen.ImportSpec{
+			{Path: "context"},
+			{Path: "io"},
+			codegen.GoaImport(""),
+		}
+		imports = append(imports, svc.UserTypeImports...)
+		header := codegen.Header(service.Name+" client", svc.PkgName, imports)
 		def := &codegen.SectionTemplate{
 			Name:   "client-struct",
 			Source: serviceClientT,
@@ -84,9 +85,9 @@ const serviceClientMethodT = `
 {{- if .ClientStream }}
 	{{- $resultType = .ClientStream.Interface }}
 {{- end }}
-func (c *{{ .ClientVarName }}) {{ .VarName }}(ctx context.Context, {{ if .PayloadRef }}p {{ .PayloadRef }}{{ end }}{{ if .MethodData.SkipRequestBodyEncodeDecode}}, req io.ReadCloser{{ end }}) ({{ if $resultType }}res {{ $resultType }}, {{ end }}{{ if .MethodData.SkipResponseBodyEncodeDecode }}resp io.ReadCloser, {{ end }}err error) {
+func (c *{{ .ClientVarName }}) {{ .VarName }}(ctx context.Context{{ if .PayloadRef }}, p {{ .PayloadRef }}{{ end }}{{ if .MethodData.SkipRequestBodyEncodeDecode}}, req io.ReadCloser{{ end }}) ({{ if $resultType }}res {{ $resultType }}, {{ end }}{{ if .MethodData.SkipResponseBodyEncodeDecode }}resp io.ReadCloser, {{ end }}err error) {
 	{{- if or $resultType .MethodData.SkipResponseBodyEncodeDecode }}
-	var ires interface{}
+	var ires any
 	{{- end }}
 	{{ if or $resultType .MethodData.SkipResponseBodyEncodeDecode }}ires{{ else }}_{{ end }}, err = c.{{ .VarName}}Endpoint(ctx, {{ if .MethodData.SkipRequestBodyEncodeDecode }}&{{ .RequestStruct }}{ {{ if .PayloadRef }}Payload: p, {{ end }}Body: req }{{ else if .PayloadRef }}p{{ else }}nil{{ end }})
 	{{- if not (or $resultType .MethodData.SkipResponseBodyEncodeDecode) }}

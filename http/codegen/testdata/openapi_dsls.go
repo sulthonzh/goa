@@ -101,7 +101,9 @@ var MultipleViewsDSL = func() {
 			})
 		})
 		Method("testEndpointTiny", func() {
-			Result(ResultT)
+			Result(ResultT, func() {
+				View("tiny")
+			})
 			HTTP(func() {
 				GET("/tiny")
 			})
@@ -170,6 +172,15 @@ var EmptyDSL = func() {
 }
 
 var FileServiceDSL = func() {
+	var _ = Service("service-name", func() {
+		Files("path1", "filename")
+		Files("path2", "filename", func() {
+			Meta("openapi:tag:user-tag")
+		})
+	})
+}
+
+var FileServiceSwaggerDSL = func() {
 	var _ = Service("service-name", func() {
 		Files("path1", "filename")
 		Files("path2", "filename", func() {
@@ -276,6 +287,45 @@ var ArrayValidationDSL = func() {
 }
 
 var ExtensionDSL = func() {
+	var PayloadT = Type("Payload", func() {
+		Attribute("string", String, func() {
+			Example("")
+			Meta("openapi:extension:x-test-schema", "Payload")
+		})
+	})
+	var ResultT = Type("Result", func() {
+		Attribute("string", String, func() {
+			Example("")
+			Meta("openapi:extension:x-test-schema", "Result")
+		})
+	})
+	var _ = API("test", func() {
+		Server("test", func() {
+			Host("localhost", func() {
+				URI("https://goa.design")
+			})
+		})
+		Meta("openapi:extension:x-test-api", "API")
+		Meta("openapi:tag:Backend")
+		Meta("openapi:tag:Backend:desc", "Description of Backend")
+		Meta("openapi:tag:Backend:url", "http://example.com")
+		Meta("openapi:tag:Backend:url:desc", "See more docs here")
+		Meta("openapi:tag:Backend:extension:x-data", `{"foo":"bar"}`)
+	})
+	Service("testService", func() {
+		Method("testEndpoint", func() {
+			Payload(PayloadT)
+			Result(ResultT)
+			HTTP(func() {
+				POST("/")
+				Meta("openapi:extension:x-test-foo", "bar")
+			})
+			Meta("openapi:extension:x-test-operation", "Operation")
+		})
+	})
+}
+
+var ExtensionSwaggerDSL = func() {
 	var PayloadT = Type("Payload", func() {
 		Attribute("string", String, func() {
 			Example("")
@@ -488,19 +538,62 @@ var PathWithWildcardDSL = func() {
 var WithTagsDSL = func() {
 	Service("test service", func() {
 		HTTP(func() {
-			Meta("swagger:tag:Service")
-			Meta("swagger:tag:Service:desc", "Service description")
+			Meta("openapi:tag:SomeTag:desc", "Endpoint description")
+			Meta("openapi:tag:SomeTag:url", "Endpoint URL")
+			Meta("openapi:tag:AnotherTag:desc", "Endpoint description")
+			Meta("openapi:tag:AnotherTag:url", "Endpoint URL")
 		})
 		Method("test endpoint", func() {
 			Payload(func() {
 				Attribute("int_map", Int)
 			})
 			HTTP(func() {
-				Meta("swagger:tag:Service")
-				Meta("swagger:tag:Service:desc", "Overwritten service description")
-				Meta("swagger:tag:Endpoint")
-				Meta("swagger:tag:Endpoint:desc", "Endpoint description")
-				Meta("swagger:tag:Endpoint:url", "Endpoint URL")
+				Meta("openapi:tag:SomeTag")
+				POST("/{*int_map}")
+			})
+		})
+		Method("another test endpoint", func() {
+			Payload(func() {
+				Attribute("int_map", Int)
+			})
+			HTTP(func() {
+				Meta("openapi:generate", "false")
+				Meta("openapi:tag:AnotherTag")
+				POST("/{*int_map}")
+			})
+		})
+	})
+	Service("another test service", func() {
+		Meta("openapi:generate", "false")
+		HTTP(func() {
+			Meta("openapi:tag:AnotherService:desc", "Another service description")
+		})
+		Method("another test endpoint", func() {
+			Payload(func() {
+				Attribute("int_map", Int)
+			})
+			HTTP(func() {
+				Meta("openapi:tag:AnotherService")
+				POST("/{*int_map}")
+			})
+		})
+	})
+}
+
+var WithTagsSwaggerDSL = func() {
+	Service("test service", func() {
+		HTTP(func() {
+			Meta("swagger:tag:SomeTag:desc", "Endpoint description")
+			Meta("swagger:tag:SomeTag:url", "Endpoint URL")
+			Meta("swagger:tag:AnotherTag:desc", "Endpoint description")
+			Meta("swagger:tag:AnotherTag:url", "Endpoint URL")
+		})
+		Method("test endpoint", func() {
+			Payload(func() {
+				Attribute("int_map", Int)
+			})
+			HTTP(func() {
+				Meta("swagger:tag:SomeTag")
 				POST("/{*int_map}")
 			})
 		})
@@ -510,9 +603,7 @@ var WithTagsDSL = func() {
 			})
 			HTTP(func() {
 				Meta("swagger:generate", "false")
-				Meta("swagger:tag:AnotherEndpoint")
-				Meta("swagger:tag:AnotherEndpoint:desc", "Endpoint description")
-				Meta("swagger:tag:AnotherEndpoint:url", "Endpoint URL")
+				Meta("swagger:tag:AnotherTag")
 				POST("/{*int_map}")
 			})
 		})
@@ -520,7 +611,6 @@ var WithTagsDSL = func() {
 	Service("another test service", func() {
 		Meta("swagger:generate", "false")
 		HTTP(func() {
-			Meta("swagger:tag:AnotherService")
 			Meta("swagger:tag:AnotherService:desc", "Another service description")
 		})
 		Method("another test endpoint", func() {
@@ -528,7 +618,140 @@ var WithTagsDSL = func() {
 				Attribute("int_map", Int)
 			})
 			HTTP(func() {
+				Meta("swagger:tag:AnotherService")
 				POST("/{*int_map}")
+			})
+		})
+	})
+}
+
+var TypenameDSL = func() {
+	var _ = API("test", func() {
+		Server("test", func() {
+			Host("localhost", func() {
+				URI("https://goa.design")
+			})
+		})
+	})
+
+	var Foo = Type("Foo", func() {
+		Meta("openapi:typename", "FooPayload")
+		Attribute("value", String, func() {
+			Example("")
+		})
+	})
+
+	var Bar = ResultType("application/vnd.goa.example.bar", func() {
+		TypeName("Bar")
+		Meta("openapi:typename", "BarResult")
+		Attribute("value", String, func() {
+			Example("")
+		})
+	})
+
+	var _ = Service("testService", func() {
+		Method("foo", func() {
+			Payload(Foo)
+			Result(Bar, func() {
+				Meta("openapi:typename", "FooResult")
+			})
+			HTTP(func() {
+				POST("/foo")
+			})
+		})
+		Method("bar", func() {
+			Payload(Foo, func() {
+				Meta("openapi:typename", "BarPayload")
+			})
+			Result(Bar)
+			HTTP(func() {
+				POST("/bar")
+			})
+		})
+		Method("baz", func() {
+			Payload(func() {
+				Meta("openapi:typename", "BazPayload")
+				Attribute("value", String, func() {
+					Example("")
+				})
+			})
+			Result(func() {
+				Meta("openapi:typename", "BazResult")
+				Attribute("value", String, func() {
+					Example("")
+				})
+			})
+			HTTP(func() {
+				POST("/baz")
+			})
+		})
+	})
+}
+
+var SkipResponseBodyEncodeDecodeDSL = func() {
+	Service("testService", func() {
+		Method("empty", func() {
+			Payload(Empty)
+			Result(Empty)
+			HTTP(func() {
+				GET("/empty")
+			})
+		})
+		Method("empty_ok", func() {
+			Payload(Empty)
+			Result(Empty)
+			HTTP(func() {
+				GET("/empty/ok")
+				Response(StatusOK)
+			})
+		})
+		Method("binary", func() {
+			Payload(Empty)
+			Result(Empty)
+			HTTP(func() {
+				GET("/binary")
+				SkipResponseBodyEncodeDecode()
+				Response(StatusOK, func() {
+					ContentType("image/png")
+				})
+			})
+		})
+	})
+}
+
+var NotGenerateServerDSL = func() {
+	var _ = API("test", func() {
+		Server("test", func() {
+			Host("localhost", func() {
+				URI("https://goa.design")
+			})
+			Meta("openapi:generate", "false")
+		})
+	})
+	Service("testService", func() {
+		Method("testEndpoint", func() {
+			Result(String)
+			HTTP(func() {
+				GET("/")
+			})
+		})
+	})
+}
+
+var NotGenerateHostDSL = func() {
+	var _ = API("test", func() {
+		Server("test", func() {
+			Host("localhost", func() {
+				URI("https://goa.design")
+				Meta("openapi:generate", "false")
+			})
+		})
+	})
+	Service("testService", func() {
+		Method("testEndpoint", func() {
+			Result(String)
+			HTTP(func() {
+				GET("/")
 			})
 		})
 	})

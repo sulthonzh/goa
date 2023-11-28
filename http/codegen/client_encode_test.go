@@ -63,6 +63,7 @@ func TestClientEncode(t *testing.T) {
 		{"query-array-bytes-validate", testdata.PayloadQueryArrayBytesValidateDSL, testdata.PayloadQueryArrayBytesValidateEncodeCode},
 		{"query-array-any", testdata.PayloadQueryArrayAnyDSL, testdata.PayloadQueryArrayAnyEncodeCode},
 		{"query-array-any-validate", testdata.PayloadQueryArrayAnyValidateDSL, testdata.PayloadQueryArrayAnyValidateEncodeCode},
+		{"query-array-alias", testdata.PayloadQueryArrayAliasDSL, testdata.PayloadQueryArrayAliasEncodeCode},
 		{"query-map-string-string", testdata.PayloadQueryMapStringStringDSL, testdata.PayloadQueryMapStringStringEncodeCode},
 		{"query-map-string-string-validate", testdata.PayloadQueryMapStringStringValidateDSL, testdata.PayloadQueryMapStringStringValidateEncodeCode},
 		{"query-map-string-bool", testdata.PayloadQueryMapStringBoolDSL, testdata.PayloadQueryMapStringBoolEncodeCode},
@@ -168,11 +169,24 @@ func TestClientEncode(t *testing.T) {
 		{"query-map-alias", testdata.QueryMapAliasDSL, testdata.QueryMapAliasEncodeCode},
 		{"query-map-alias-validate", testdata.QueryMapAliasValidateDSL, testdata.QueryMapAliasValidateEncodeCode},
 		{"query-array-nested-alias-validate", testdata.QueryArrayNestedAliasValidateDSL, testdata.QueryArrayNestedAliasValidateEncodeCode},
+
+		{"body-custom-name", testdata.PayloadBodyCustomNameDSL, testdata.PayloadBodyCustomNameEncodeCode},
+		// path-custom-name is not needed because no encoder is created.
+		{"query-custom-name", testdata.PayloadQueryCustomNameDSL, testdata.PayloadQueryCustomNameEncodeCode},
+		{"header-custom-name", testdata.PayloadHeaderCustomNameDSL, testdata.PayloadHeaderCustomNameEncodeCode},
+		{"cookie-custom-name", testdata.PayloadCookieCustomNameDSL, testdata.PayloadCookieCustomNameEncodeCode},
 	}
 	golden := makeGolden(t, "testdata/payload_encode_functions.go")
 	if golden != nil {
-		golden.WriteString("package testdata\n")
-		defer golden.Close()
+		if _, err := golden.WriteString("package testdata\n"); err != nil {
+			t.Fatal(err)
+		}
+		defer func() {
+			err := golden.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}()
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
@@ -189,9 +203,11 @@ func TestClientEncode(t *testing.T) {
 
 			if golden != nil {
 				name := codegen.Goify(c.Name, true)
-				name = strings.Replace(name, "Uint", "UInt", -1)
+				name = strings.ReplaceAll(name, "Uint", "UInt")
 				code = "\nvar Payload" + name + "EncodeCode = `" + code + "`"
-				golden.WriteString(code + "\n")
+				if _, err := golden.WriteString(code + "\n"); err != nil {
+					t.Fatal(err)
+				}
 			} else if code != c.Code {
 				t.Errorf("invalid code, got:\n%s\ngot vs. expected:\n%s", code, codegen.Diff(t, code, c.Code))
 			}
@@ -208,6 +224,7 @@ func TestClientBuildRequest(t *testing.T) {
 		{"path-string", testdata.PayloadPathStringDSL, testdata.PathStringRequestBuildCode},
 		{"path-string-required", testdata.PayloadPathStringValidateDSL, testdata.PathStringRequiredRequestBuildCode},
 		{"path-string-default", testdata.PayloadPathStringDefaultDSL, testdata.PathStringDefaultRequestBuildCode},
+		{"path-object", testdata.PayloadPathObjectDSL, testdata.PathObjectRequestBuildCode},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {

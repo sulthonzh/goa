@@ -1,6 +1,8 @@
 package http
 
 import (
+	"context"
+	"encoding/xml"
 	"net/http"
 
 	goa "goa.design/goa/v3/pkg"
@@ -34,8 +36,13 @@ type (
 	}
 )
 
+var (
+	// ErrorResponseXMLName is the XML name used for ErrorResponse.
+	ErrorResponseXMLName = xml.Name{Local: "error"}
+)
+
 // NewErrorResponse creates a HTTP response from the given error.
-func NewErrorResponse(err error) Statuser {
+func NewErrorResponse(ctx context.Context, err error) Statuser {
 	if gerr, ok := err.(*goa.ServiceError); ok {
 		return &ErrorResponse{
 			Name:      gerr.Name,
@@ -46,7 +53,27 @@ func NewErrorResponse(err error) Statuser {
 			Fault:     gerr.Fault,
 		}
 	}
-	return NewErrorResponse(goa.Fault(err.Error()))
+	return NewErrorResponse(ctx, goa.Fault(err.Error()))
+}
+
+func (resp *ErrorResponse) MarshalXML(e *xml.Encoder, _ xml.StartElement) error {
+	return e.Encode(struct {
+		XMLName   xml.Name
+		Name      string `xml:"name"`
+		ID        string `xml:"id"`
+		Message   string `xml:"message"`
+		Temporary bool   `xml:"temporary"`
+		Timeout   bool   `xml:"timeout"`
+		Fault     bool   `xml:"fault"`
+	}{
+		XMLName:   ErrorResponseXMLName,
+		Name:      resp.Name,
+		ID:        resp.ID,
+		Message:   resp.Message,
+		Temporary: resp.Temporary,
+		Timeout:   resp.Timeout,
+		Fault:     resp.Fault,
+	})
 }
 
 // StatusCode implements a heuristic that computes a HTTP response status code

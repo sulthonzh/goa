@@ -65,7 +65,7 @@ var ValidationTypesDSL = func() {
 		_ = Type("AliasType", func() {
 			Attribute("required_alias", Alias)
 			Attribute("alias", Alias)
-			Required("required_string")
+			Required("required_alias")
 		})
 
 		_ = Type("UserType", func() {
@@ -116,6 +116,20 @@ var ValidationTypesDSL = func() {
 			Required("required_map")
 		})
 
+		_ = Type("Union", func() {
+			OneOf("required_union", func() {
+				Attribute("int", IntegerT)
+				Attribute("float", FloatT)
+				Attribute("string", StringT)
+			})
+			OneOf("union", func() {
+				Attribute("int", IntegerT)
+				Attribute("float", FloatT)
+				Attribute("string", StringT)
+			})
+			Required("required_union")
+		})
+
 		Result = ResultType("application/vnd.goa.result", func() {
 			TypeName("Result")
 			Attributes(func() {
@@ -131,6 +145,12 @@ var ValidationTypesDSL = func() {
 			TypeName("TypeWithCollection")
 			Attributes(func() {
 				Attribute("collection", CollectionOf(Result))
+			})
+		})
+
+		_ = Type("Deep", func() {
+			Attribute("deep", func() {
+				Attribute("integer", IntegerT)
 			})
 		})
 	)

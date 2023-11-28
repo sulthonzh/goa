@@ -59,8 +59,7 @@ var UnaryRPCWithErrorsDSL = func() {
 	var AnotherError = ResultType("application/vnd.goa.another_error", func() {
 		TypeName("AnotherError")
 		Attributes(func() {
-			Attribute("name", String, func() {
-				Meta("struct:error:name")
+			ErrorName("name", String, func() {
 				Enum("this", "that")
 			})
 			Attribute("description", String)
@@ -86,14 +85,26 @@ var UnaryRPCWithErrorsDSL = func() {
 }
 
 var ElemValidationDSL = func() {
-	var ResultType = Type("ResultType", func() {
+	var PayloadType = Type("PayloadType", func() {
 		Field(1, "foo", MapOf(String, ArrayOf(String)), func() {
 			Elem(func() { MinLength(1) })
 		})
 	})
 	Service("ServiceElemValidation", func() {
 		Method("MethodElemValidation", func() {
-			Payload(ResultType)
+			Payload(PayloadType)
+			GRPC(func() {})
+		})
+	})
+}
+
+var AliasValidationDSL = func() {
+	var UUID = Type("UUID", String, func() {
+		Format(FormatUUID)
+	})
+	Service("ServiceElemValidation", func() {
+		Method("MethodElemValidation", func() {
+			Payload(UUID)
 			GRPC(func() {})
 		})
 	})
@@ -163,6 +174,22 @@ var ServerStreamingMapDSL = func() {
 	Service("ServiceServerStreamingMap", func() {
 		Method("MethodServerStreamingMap", func() {
 			StreamingResult(MapOf(String, UT))
+			GRPC(func() {})
+		})
+	})
+}
+
+var ServerStreamingSharedResultRPCDSL = func() {
+	var UT = Type("UserType", func() {
+		Field(1, "IntField", Int)
+	})
+	Service("ServiceServerStreamingRPC", func() {
+		Method("MethodServerStreamingRPC", func() {
+			StreamingResult(UT)
+			GRPC(func() {})
+		})
+		Method("OtherMethodServerStreamingRPC", func() {
+			StreamingResult(UT)
 			GRPC(func() {})
 		})
 	})
@@ -523,6 +550,19 @@ var ResultWithCollectionDSL = func() {
 	})
 }
 
+var ResultWithAliasValidation = func() {
+	var UUID = Type("UUID", String, func() {
+		Format(FormatUUID)
+	})
+
+	Service("ServiceResultWithAliasValidation", func() {
+		Method("MethodResultWithAliasValidation", func() {
+			Result(UUID)
+			GRPC(func() {})
+		})
+	})
+}
+
 var PayloadWithMixedAttributesDSL = func() {
 	var APayload = Type("APayload", func() {
 		Field(1, "optional", Int)
@@ -570,6 +610,20 @@ var PayloadWithNestedTypesDSL = func() {
 			GRPC(func() {
 				Response(CodeOK)
 			})
+		})
+	})
+}
+
+var PayloadWithMultipleUseTypesDSL = func() {
+	var DupePayload = Type("DupePayload", String)
+	Service("ServicePayloadWithNestedTypes", func() {
+		Method("MethodPayloadDuplicateA", func() {
+			Payload(DupePayload)
+			GRPC(func() {})
+		})
+		Method("MethodPayloadDuplicateB", func() {
+			Payload(DupePayload)
+			GRPC(func() {})
 		})
 	})
 }
@@ -822,6 +876,102 @@ var PayloadWithValidationsDSL = func() {
 					Attribute("MetadataString")
 				})
 			})
+		})
+	})
+}
+
+var StructMetaTypeDSL = func() {
+	Service("UsingMetaTypes", func() {
+		Method("Method", func() {
+			Payload(func() {
+				Field(1, "a", Int64, func() {
+					Meta("struct:field:type", "flag.ErrorHandling", "flag")
+					Default(1)
+				})
+				Field(2, "b", Int64, func() {
+					Meta("struct:field:type", "flag.ErrorHandling", "flag")
+					Default(2)
+				})
+				Field(3, "c", ArrayOf(Int64), func() {
+					Elem(func() {
+						Meta("struct:field:type", "time.Duration", "time")
+					})
+				})
+				Field(4, "d", Int64, func() {
+					Meta("struct:field:type", "flag.ErrorHandling", "flag")
+				})
+			})
+			Result(func() {
+				Field(1, "a", Int64, func() {
+					Meta("struct:field:type", "flag.ErrorHandling", "flag")
+					Default(1)
+				})
+				Field(2, "b", Int64, func() {
+					Meta("struct:field:type", "flag.ErrorHandling", "flag")
+					Default(2)
+				})
+				Field(3, "c", ArrayOf(Int64), func() {
+					Elem(func() {
+						Meta("struct:field:type", "time.Duration", "time")
+					})
+				})
+				Field(4, "d", Int64, func() {
+					Meta("struct:field:type", "flag.ErrorHandling", "flag")
+				})
+			})
+			GRPC(func() {})
+		})
+	})
+}
+
+var StructFieldNameMetaTypeDSL = func() {
+	Service("UsingMetaTypes", func() {
+		Method("Method", func() {
+			Payload(func() {
+				Field(1, "a", Int64, func() {
+					Meta("struct:field:name", "Foo")
+					Default(1)
+				})
+				Field(2, "b", ArrayOf(Int64), func() {
+					Meta("struct:field:name", "Bar")
+				})
+				Required("b")
+			})
+			Result(func() {
+				Field(1, "a", Int64, func() {
+					Meta("struct:field:name", "Foo")
+					Default(1)
+				})
+				Field(2, "b", ArrayOf(Int64), func() {
+					Meta("struct:field:name", "Bar")
+				})
+				Required("b")
+			})
+			GRPC(func() {})
+		})
+	})
+}
+
+var DefaultFieldsDSL = func() {
+	Service("DefaultFields", func() {
+		Method("Method", func() {
+			Payload(func() {
+				Field(1, "req", Int64)
+				Field(2, "opt", Int64)
+				Field(3, "def0", Int64, func() { Default(0) })
+				Field(4, "def1", Int64, func() { Default(1) })
+				Field(5, "def2", Int64, func() { Default(2) })
+				Field(6, "reqs", String)
+				Field(7, "opts", String)
+				Field(8, "defs", String, func() { Default("!") })
+				Field(9, "defe", String, func() { Default("") })
+				Field(10, "rat", Float64)
+				Field(11, "flt", Float64)
+				Field(12, "flt0", Float64, func() { Default(0.0) })
+				Field(13, "flt1", Float64, func() { Default(1.0) })
+				Required("req", "reqs", "rat")
+			})
+			GRPC(func() {})
 		})
 	})
 }

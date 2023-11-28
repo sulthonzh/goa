@@ -6,15 +6,16 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"text/template"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"goa.design/goa/v3/codegen"
 	httpgen "goa.design/goa/v3/http/codegen"
-	openapi "goa.design/goa/v3/http/codegen/openapi"
+	"goa.design/goa/v3/http/codegen/openapi"
 	openapiv3 "goa.design/goa/v3/http/codegen/openapi/v3"
 	"goa.design/goa/v3/http/codegen/testdata"
 )
@@ -31,6 +32,7 @@ func TestFiles(t *testing.T) {
 	}{
 		// TestSections
 		{"file-service", testdata.FileServiceDSL},
+		{"file-service-swagger", testdata.FileServiceSwaggerDSL},
 		{"valid", testdata.SimpleDSL},
 		{"multiple-services", testdata.MultipleServicesDSL},
 		{"multiple-views", testdata.MultipleViewsDSL},
@@ -41,12 +43,20 @@ func TestFiles(t *testing.T) {
 		{"with-map", testdata.WithMapDSL},
 		{"path-with-wildcards", testdata.PathWithWildcardDSL},
 		{"with-tags", testdata.WithTagsDSL},
+		{"with-tags-swagger", testdata.WithTagsSwaggerDSL},
+		{"typename", testdata.TypenameDSL},
+		{"not-generate-server", testdata.NotGenerateServerDSL},
+		{"not-generate-host", testdata.NotGenerateHostDSL},
 		// TestEndpoints
 		{"endpoint", testdata.ExtensionDSL},
+		{"endpoint-swagger", testdata.ExtensionSwaggerDSL},
+		{"skip-response-body-encode-decode", testdata.SkipResponseBodyEncodeDecodeDSL},
 		// TestValidations
 		{"string", testdata.StringValidationDSL},
 		{"integer", testdata.IntValidationDSL},
 		{"array", testdata.ArrayValidationDSL},
+		// Error examples
+		{"error-examples", testdata.ErrorExamplesDSL},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
@@ -77,15 +87,15 @@ func TestFiles(t *testing.T) {
 					}
 					validateSwagger(t, buf.Bytes())
 
-					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", c.Name, tname))
+					golden := filepath.Join(goldenPath, fmt.Sprintf("%s_%s.golden", strings.TrimSuffix(c.Name, "-swagger"), tname))
 					if *update {
-						if err := ioutil.WriteFile(golden, buf.Bytes(), 0644); err != nil {
+						if err := os.WriteFile(golden, buf.Bytes(), 0644); err != nil {
 							t.Fatalf("failed to update golden file: %s", err)
 						}
 					}
 
-					want, err := ioutil.ReadFile(golden)
-					want = bytes.Replace(want, []byte{'\r', '\n'}, []byte{'\n'}, -1)
+					want, err := os.ReadFile(golden)
+					want = bytes.ReplaceAll(want, []byte{'\r', '\n'}, []byte{'\n'})
 					if err != nil {
 						t.Fatalf("failed to read golden file: %s", err)
 					}
@@ -108,7 +118,7 @@ func TestFiles(t *testing.T) {
 }
 
 func prettifyJSON(t *testing.T, b []byte) string {
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(b, &v); err != nil {
 		t.Errorf("failed to unmarshal swagger JSON: %s", err)
 	}
@@ -125,6 +135,6 @@ func validateSwagger(t *testing.T, b []byte) {
 		err = swagger.Validate(context.Background())
 	}
 	if err != nil {
-		t.Errorf("invalid spec: %s", err.Error())
+		t.Errorf("invalid spec: %s\nspec:\n%s", err.Error(), string(b))
 	}
 }

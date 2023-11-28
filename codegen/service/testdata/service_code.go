@@ -156,13 +156,87 @@ type BResult struct {
 	UserTypeField *Parent
 }
 
-type Parent struct {
-	C *Child
-}
-
 type Child struct {
 	P *Parent
 }
+
+type Parent struct {
+	C *Child
+}
+`
+
+const UnionMethod = `
+// Service is the UnionService service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context, *AUnion) (res *AUnion, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "UnionService"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [1]string{"A"}
+
+// AUnion is the payload type of the UnionService service A method.
+type AUnion struct {
+	Values interface {
+		valuesVal()
+	}
+}
+
+type ValuesBoolean bool
+
+type ValuesBytes []byte
+
+type ValuesInt int
+
+type ValuesString string
+
+func (ValuesBoolean) valuesVal() {}
+func (ValuesBytes) valuesVal()   {}
+func (ValuesInt) valuesVal()     {}
+func (ValuesString) valuesVal()  {}
+`
+
+const MultiUnionMethod = `
+// Service is the MultiUnionService service interface.
+type Service interface {
+	// MultiUnion implements MultiUnion.
+	MultiUnion(context.Context, *Union) (res *Union, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "MultiUnionService"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [1]string{"MultiUnion"}
+
+type TypeA struct {
+	A *int
+}
+
+type TypeB struct {
+	B *string
+}
+
+// Union is the payload type of the MultiUnionService service MultiUnion method.
+type Union struct {
+	Values interface {
+		valuesVal()
+	}
+}
+
+func (*TypeA) valuesVal() {}
+func (*TypeB) valuesVal() {}
 `
 
 const WithDefault = `
@@ -290,11 +364,7 @@ var MethodNames = [1]string{"A"}
 
 // MakeError builds a goa.ServiceError from an error.
 func MakeError(err error) *goa.ServiceError {
-	return &goa.ServiceError{
-		Name:    "error",
-		ID:      goa.NewErrorID(),
-		Message: err.Error(),
-	}
+	return goa.NewServiceError(err, "error", false, false, false)
 }
 `
 
@@ -315,9 +385,6 @@ const ServiceName = "CustomErrors"
 // MethodKey key.
 var MethodNames = [1]string{"A"}
 
-// primitive error description
-type Primitive string
-
 type APayload struct {
 	IntField      int
 	StringField   string
@@ -331,15 +398,8 @@ type Result struct {
 	B string
 }
 
-// Error returns an error description.
-func (e Primitive) Error() string {
-	return "primitive error description"
-}
-
-// ErrorName returns "primitive".
-func (e Primitive) ErrorName() string {
-	return "primitive"
-}
+// primitive error description
+type Primitive string
 
 // Error returns an error description.
 func (e *APayload) Error() string {
@@ -347,7 +407,14 @@ func (e *APayload) Error() string {
 }
 
 // ErrorName returns "APayload".
+//
+// Deprecated: Use GoaErrorName - https://github.com/goadesign/goa/issues/3105
 func (e *APayload) ErrorName() string {
+	return e.GoaErrorName()
+}
+
+// GoaErrorName returns "APayload".
+func (e *APayload) GoaErrorName() string {
 	return "user_type"
 }
 
@@ -357,8 +424,32 @@ func (e *Result) Error() string {
 }
 
 // ErrorName returns "Result".
+//
+// Deprecated: Use GoaErrorName - https://github.com/goadesign/goa/issues/3105
 func (e *Result) ErrorName() string {
+	return e.GoaErrorName()
+}
+
+// GoaErrorName returns "Result".
+func (e *Result) GoaErrorName() string {
 	return e.B
+}
+
+// Error returns an error description.
+func (e Primitive) Error() string {
+	return "primitive error description"
+}
+
+// ErrorName returns "primitive".
+//
+// Deprecated: Use GoaErrorName - https://github.com/goadesign/goa/issues/3105
+func (e Primitive) ErrorName() string {
+	return e.GoaErrorName()
+}
+
+// GoaErrorName returns "primitive".
+func (e Primitive) GoaErrorName() string {
+	return "primitive"
 }
 `
 
@@ -389,7 +480,14 @@ func (e *GoaError) Error() string {
 }
 
 // ErrorName returns "GoaError".
+//
+// Deprecated: Use GoaErrorName - https://github.com/goadesign/goa/issues/3105
 func (e *GoaError) ErrorName() string {
+	return e.GoaErrorName()
+}
+
+// GoaErrorName returns "GoaError".
+func (e *GoaError) GoaErrorName() string {
 	return e.ErrorCode
 }
 `
@@ -659,14 +757,14 @@ const ServiceName = "ResultCollectionMultipleViewsMethod"
 // MethodKey key.
 var MethodNames = [1]string{"A"}
 
-// MultipleViewsCollection is the result type of the
-// ResultCollectionMultipleViewsMethod service A method.
-type MultipleViewsCollection []*MultipleViews
-
 type MultipleViews struct {
 	A string
 	B int
 }
+
+// MultipleViewsCollection is the result type of the
+// ResultCollectionMultipleViewsMethod service A method.
+type MultipleViewsCollection []*MultipleViews
 
 // NewMultipleViewsCollection initializes result type MultipleViewsCollection
 // from viewed result type MultipleViewsCollection.
@@ -956,13 +1054,13 @@ type RT struct {
 	A RT2Collection
 }
 
-type RT2Collection []*RT2
-
 type RT2 struct {
 	C string
 	D int
 	E *string
 }
+
+type RT2Collection []*RT2
 
 // NewRT initializes result type RT from viewed result type RT.
 func NewRT(vres *resultwithresulttypecollectionviews.RT) *RT {
@@ -1204,13 +1302,13 @@ type ApplicationDashedType struct {
 	Name *string
 }
 
+type ApplicationDashedTypeCollection []*ApplicationDashedType
+
 // ListResult is the result type of the ResultWithDashedMimeType service list
 // method.
 type ListResult struct {
 	Items ApplicationDashedTypeCollection
 }
-
-type ApplicationDashedTypeCollection []*ApplicationDashedType
 
 // NewApplicationDashedType initializes result type ApplicationDashedType from
 // viewed result type ApplicationDashedType.
@@ -1240,6 +1338,251 @@ func newApplicationDashedType(vres *resultwithdashedmimetypeviews.ApplicationDas
 func newApplicationDashedTypeView(res *ApplicationDashedType) *resultwithdashedmimetypeviews.ApplicationDashedTypeView {
 	vres := &resultwithdashedmimetypeviews.ApplicationDashedTypeView{
 		Name: res.Name,
+	}
+	return vres
+}
+`
+
+const ResultWithOneOfTypeMethod = `
+// Service is the ResultWithOneOfType service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context) (res *ResultOneof, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "ResultWithOneOfType"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [1]string{"A"}
+
+type Item struct {
+	A *string
+}
+
+// ResultOneof is the result type of the ResultWithOneOfType service A method.
+type ResultOneof struct {
+	Result interface {
+		resultVal()
+	}
+}
+
+type T struct {
+	Message *string
+}
+
+type U struct {
+	Item *Item
+}
+
+func (*T) resultVal() {}
+func (*U) resultVal() {}
+
+// NewResultOneof initializes result type ResultOneof from viewed result type
+// ResultOneof.
+func NewResultOneof(vres *resultwithoneoftypeviews.ResultOneof) *ResultOneof {
+	return newResultOneof(vres.Projected)
+}
+
+// NewViewedResultOneof initializes viewed result type ResultOneof from result
+// type ResultOneof using the given view.
+func NewViewedResultOneof(res *ResultOneof, view string) *resultwithoneoftypeviews.ResultOneof {
+	p := newResultOneofView(res)
+	return &resultwithoneoftypeviews.ResultOneof{Projected: p, View: "default"}
+}
+
+// newResultOneof converts projected type ResultOneof to service type
+// ResultOneof.
+func newResultOneof(vres *resultwithoneoftypeviews.ResultOneofView) *ResultOneof {
+	res := &ResultOneof{}
+	if vres.Result != nil {
+		switch actual := vres.Result.(type) {
+		case *resultwithoneoftypeviews.TView:
+			res.Result = &T{
+				Message: actual.Message,
+			}
+
+		case *resultwithoneoftypeviews.UView:
+			res.Result = &U{}
+			if actual.Item != nil {
+				res.Result.(*U).Item = transformResultwithoneoftypeviewsItemViewToItem(actual.Item)
+			}
+
+		}
+	}
+	return res
+}
+
+// newResultOneofView projects result type ResultOneof to projected type
+// ResultOneofView using the "default" view.
+func newResultOneofView(res *ResultOneof) *resultwithoneoftypeviews.ResultOneofView {
+	vres := &resultwithoneoftypeviews.ResultOneofView{}
+	if res.Result != nil {
+		switch actual := res.Result.(type) {
+		case *T:
+			vres.Result = &resultwithoneoftypeviews.TView{
+				Message: actual.Message,
+			}
+
+		case *U:
+			vres.Result = &resultwithoneoftypeviews.UView{}
+			if actual.Item != nil {
+				vres.Result.(*resultwithoneoftypeviews.UView).Item = transformItemToResultwithoneoftypeviewsItemView(actual.Item)
+			}
+
+		}
+	}
+	return vres
+}
+
+// transformResultwithoneoftypeviewsTViewToT builds a value of type *T from a
+// value of type *resultwithoneoftypeviews.TView.
+func transformResultwithoneoftypeviewsTViewToT(v *resultwithoneoftypeviews.TView) *T {
+	if v == nil {
+		return nil
+	}
+	res := &T{
+		Message: v.Message,
+	}
+
+	return res
+}
+
+// transformResultwithoneoftypeviewsUViewToU builds a value of type *U from a
+// value of type *resultwithoneoftypeviews.UView.
+func transformResultwithoneoftypeviewsUViewToU(v *resultwithoneoftypeviews.UView) *U {
+	if v == nil {
+		return nil
+	}
+	res := &U{}
+	if v.Item != nil {
+		res.Item = transformResultwithoneoftypeviewsItemViewToItem(v.Item)
+	}
+
+	return res
+}
+
+// transformResultwithoneoftypeviewsItemViewToItem builds a value of type *Item
+// from a value of type *resultwithoneoftypeviews.ItemView.
+func transformResultwithoneoftypeviewsItemViewToItem(v *resultwithoneoftypeviews.ItemView) *Item {
+	if v == nil {
+		return nil
+	}
+	res := &Item{
+		A: v.A,
+	}
+
+	return res
+}
+
+// transformTToResultwithoneoftypeviewsTView builds a value of type
+// *resultwithoneoftypeviews.TView from a value of type *T.
+func transformTToResultwithoneoftypeviewsTView(v *T) *resultwithoneoftypeviews.TView {
+	if v == nil {
+		return nil
+	}
+	res := &resultwithoneoftypeviews.TView{
+		Message: v.Message,
+	}
+
+	return res
+}
+
+// transformUToResultwithoneoftypeviewsUView builds a value of type
+// *resultwithoneoftypeviews.UView from a value of type *U.
+func transformUToResultwithoneoftypeviewsUView(v *U) *resultwithoneoftypeviews.UView {
+	if v == nil {
+		return nil
+	}
+	res := &resultwithoneoftypeviews.UView{}
+	if v.Item != nil {
+		res.Item = transformItemToResultwithoneoftypeviewsItemView(v.Item)
+	}
+
+	return res
+}
+
+// transformItemToResultwithoneoftypeviewsItemView builds a value of type
+// *resultwithoneoftypeviews.ItemView from a value of type *Item.
+func transformItemToResultwithoneoftypeviewsItemView(v *Item) *resultwithoneoftypeviews.ItemView {
+	if v == nil {
+		return nil
+	}
+	res := &resultwithoneoftypeviews.ItemView{
+		A: v.A,
+	}
+
+	return res
+}
+`
+
+const ResultWithInlineValidation = `
+// Service is the ResultWithInlineValidation service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context) (res *ResultInlineValidation, err error)
+	// B implements B.
+	B(context.Context) (res *ResultInlineValidationBResult, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "ResultWithInlineValidation"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [2]string{"A", "B"}
+
+// ResultInlineValidation is the result type of the ResultWithInlineValidation
+// service A method.
+type ResultInlineValidation struct {
+	A *string
+	B *int
+}
+
+// ResultInlineValidationBResult is the result type of the
+// ResultWithInlineValidation service B method.
+type ResultInlineValidationBResult struct {
+	A string
+	B *int
+}
+
+// NewResultInlineValidation initializes result type ResultInlineValidation
+// from viewed result type ResultInlineValidation.
+func NewResultInlineValidation(vres *resultwithinlinevalidationviews.ResultInlineValidation) *ResultInlineValidation {
+	return newResultInlineValidation(vres.Projected)
+}
+
+// NewViewedResultInlineValidation initializes viewed result type
+// ResultInlineValidation from result type ResultInlineValidation using the
+// given view.
+func NewViewedResultInlineValidation(res *ResultInlineValidation, view string) *resultwithinlinevalidationviews.ResultInlineValidation {
+	p := newResultInlineValidationView(res)
+	return &resultwithinlinevalidationviews.ResultInlineValidation{Projected: p, View: "default"}
+}
+
+// newResultInlineValidation converts projected type ResultInlineValidation to
+// service type ResultInlineValidation.
+func newResultInlineValidation(vres *resultwithinlinevalidationviews.ResultInlineValidationView) *ResultInlineValidation {
+	res := &ResultInlineValidation{
+		A: vres.A,
+		B: vres.B,
+	}
+	return res
+}
+
+// newResultInlineValidationView projects result type ResultInlineValidation to
+// projected type ResultInlineValidationView using the "default" view.
+func newResultInlineValidationView(res *ResultInlineValidation) *resultwithinlinevalidationviews.ResultInlineValidationView {
+	vres := &resultwithinlinevalidationviews.ResultInlineValidationView{
+		A: res.A,
+		B: res.B,
 	}
 	return vres
 }
@@ -1644,18 +1987,6 @@ type StreamingPayloadMethodClientStream interface {
 	CloseAndRecv() (*AResult, error)
 }
 
-// BPayload is the payload type of the StreamingPayloadService service
-// StreamingPayloadMethod method.
-type BPayload struct {
-	ArrayField  []bool
-	MapField    map[int]string
-	ObjectField *struct {
-		IntField    *int
-		StringField *string
-	}
-	UserTypeField *Parent
-}
-
 // APayload is the streaming payload type of the StreamingPayloadService
 // service StreamingPayloadMethod method.
 type APayload struct {
@@ -1676,12 +2007,24 @@ type AResult struct {
 	OptionalField *string
 }
 
-type Parent struct {
-	C *Child
+// BPayload is the payload type of the StreamingPayloadService service
+// StreamingPayloadMethod method.
+type BPayload struct {
+	ArrayField  []bool
+	MapField    map[int]string
+	ObjectField *struct {
+		IntField    *int
+		StringField *string
+	}
+	UserTypeField *Parent
 }
 
 type Child struct {
 	P *Parent
+}
+
+type Parent struct {
+	C *Child
 }
 `
 
@@ -1707,15 +2050,15 @@ var MethodNames = [1]string{"StreamingPayloadNoPayloadMethod"}
 type StreamingPayloadNoPayloadMethodServerStream interface {
 	// SendAndClose streams instances of "string" and closes the stream.
 	SendAndClose(string) error
-	// Recv reads instances of "interface{}" from the stream.
-	Recv() (interface{}, error)
+	// Recv reads instances of "any" from the stream.
+	Recv() (any, error)
 }
 
 // StreamingPayloadNoPayloadMethodClientStream is the interface a
 // "StreamingPayloadNoPayloadMethod" endpoint client stream must satisfy.
 type StreamingPayloadNoPayloadMethodClientStream interface {
-	// Send streams instances of "interface{}".
-	Send(interface{}) error
+	// Send streams instances of "any".
+	Send(any) error
 	// CloseAndRecv stops sending messages to the stream and reads instances of
 	// "string" from the stream.
 	CloseAndRecv() (string, error)
@@ -2040,18 +2383,6 @@ type BidirectionalStreamingMethodClientStream interface {
 	Close() error
 }
 
-// BPayload is the payload type of the BidirectionalStreamingService service
-// BidirectionalStreamingMethod method.
-type BPayload struct {
-	ArrayField  []bool
-	MapField    map[int]string
-	ObjectField *struct {
-		IntField    *int
-		StringField *string
-	}
-	UserTypeField *Parent
-}
-
 // APayload is the streaming payload type of the BidirectionalStreamingService
 // service BidirectionalStreamingMethod method.
 type APayload struct {
@@ -2072,12 +2403,24 @@ type AResult struct {
 	OptionalField *string
 }
 
-type Parent struct {
-	C *Child
+// BPayload is the payload type of the BidirectionalStreamingService service
+// BidirectionalStreamingMethod method.
+type BPayload struct {
+	ArrayField  []bool
+	MapField    map[int]string
+	ObjectField *struct {
+		IntField    *int
+		StringField *string
+	}
+	UserTypeField *Parent
 }
 
 type Child struct {
 	P *Parent
+}
+
+type Parent struct {
+	C *Child
 }
 `
 
@@ -2371,5 +2714,228 @@ func newMultipleViewsViewTiny(res *MultipleViews) *bidirectionalstreamingresultw
 		A: res.A,
 	}
 	return vres
+}
+`
+
+const PkgPath = `
+// Service is the PkgPathMethod service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context, *foo.Foo) (res *foo.Foo, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "PkgPathMethod"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [1]string{"A"}
+`
+
+const PkgPathArray = `
+// Service is the PkgPathArrayMethod service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context, []*foo.Foo) (res []*foo.Foo, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "PkgPathArrayMethod"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [1]string{"A"}
+`
+
+const PkgPathRecursive = `
+// Service is the PkgPathRecursiveMethod service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context, *foo.RecursiveFoo) (res *foo.RecursiveFoo, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "PkgPathRecursiveMethod"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [1]string{"A"}
+`
+
+const PkgPathMultiple = `
+// Service is the MultiplePkgPathMethod service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context, *bar.Bar) (res *bar.Bar, err error)
+	// B implements B.
+	B(context.Context, *baz.Baz) (res *baz.Baz, err error)
+	// EnvelopedB implements EnvelopedB.
+	EnvelopedB(context.Context, *EnvelopedBPayload) (res *EnvelopedBResult, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "MultiplePkgPathMethod"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [3]string{"A", "B", "EnvelopedB"}
+
+// EnvelopedBPayload is the payload type of the MultiplePkgPathMethod service
+// EnvelopedB method.
+type EnvelopedBPayload struct {
+	Baz *baz.Baz
+}
+
+// EnvelopedBResult is the result type of the MultiplePkgPathMethod service
+// EnvelopedB method.
+type EnvelopedBResult struct {
+	Baz *baz.Baz
+}
+`
+
+const PkgPathFoo = `// Foo is the payload type of the PkgPathMethod service A method.
+type Foo struct {
+	IntField *int
+}
+`
+
+const PkgPathArrayFoo = `
+type Foo struct {
+	IntField *int
+}
+`
+
+const PkgPathRecursiveFooFoo = `
+type Foo struct {
+	IntField *int
+}
+`
+
+const PkgPathRecursiveFoo = `// RecursiveFoo is the payload type of the PkgPathRecursiveMethod service A
+// method.
+type RecursiveFoo struct {
+	Foo *Foo
+}
+`
+
+const PkgPathBar = `// Bar is the payload type of the MultiplePkgPathMethod service A method.
+type Bar struct {
+	IntField *int
+}
+`
+
+const PkgPathBaz = `// Baz is the payload type of the MultiplePkgPathMethod service B method.
+type Baz struct {
+	IntField *int
+}
+`
+
+const PkgPathNoDir = `
+// Service is the NoDirMethod service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context, *NoDir) (res *NoDir, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "NoDirMethod"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [1]string{"A"}
+
+// NoDir is the payload type of the NoDirMethod service A method.
+type NoDir struct {
+	IntField *int
+}
+`
+
+const PkgPathDupe1 = `
+// Service is the PkgPathDupeMethod service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context, *foo.Foo) (res *foo.Foo, err error)
+	// B implements B.
+	B(context.Context, *foo.Foo) (res *foo.Foo, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "PkgPathDupeMethod"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [2]string{"A", "B"}
+`
+
+const PkgPathFooDupe = `// Foo is the payload type of the PkgPathDupeMethod service A method.
+type Foo struct {
+	IntField *int
+}
+`
+
+const PkgPathDupe2 = `
+// Service is the PkgPathDupeMethod2 service interface.
+type Service interface {
+	// A implements A.
+	A(context.Context, *foo.Foo) (res *foo.Foo, err error)
+	// B implements B.
+	B(context.Context, *foo.Foo) (res *foo.Foo, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "PkgPathDupeMethod2"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [2]string{"A", "B"}
+`
+
+const PkgPathPayloadAttribute = `
+// Service is the PkgPathPayloadAttributeDSL service interface.
+type Service interface {
+	// Foo implements Foo.
+	FooEndpoint(context.Context, *Bar) (res *Bar, err error)
+}
+
+// ServiceName is the name of the service as defined in the design. This is the
+// same value that is set in the endpoint request contexts under the ServiceKey
+// key.
+const ServiceName = "PkgPathPayloadAttributeDSL"
+
+// MethodNames lists the service method names as defined in the design. These
+// are the same values that are set in the endpoint request contexts under the
+// MethodKey key.
+var MethodNames = [1]string{"Foo"}
+
+// Bar is the payload type of the PkgPathPayloadAttributeDSL service Foo method.
+type Bar struct {
+	Foo *foo.Foo
+}
+`
+
+const PkgPathPayloadAttributeFoo = `
+type Foo struct {
+	IntField *int
 }
 `

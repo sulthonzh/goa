@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"goa.design/goa/v3/codegen"
 	"goa.design/goa/v3/expr"
@@ -14,6 +15,9 @@ import (
 const (
 	// ProtoVersion is the protocol buffer version used to generate .proto files
 	ProtoVersion = "proto3"
+
+	// ProtoPrefix is the prefix added to the proto package name.
+	ProtoPrefix = "goagen"
 )
 
 // ProtoFiles returns a *.proto file for each gRPC service.
@@ -28,14 +32,23 @@ func ProtoFiles(genpkg string, root *expr.RootExpr) []*codegen.File {
 func protoFile(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File {
 	data := GRPCServices.Get(svc.Name())
 	svcName := data.Service.PathName
-	path := filepath.Join(codegen.Gendir, "grpc", svcName, pbPkgName, "goadesign_goagen_"+svcName+".proto")
+	parts := strings.Split(genpkg, "/")
+	var repoName string
+	if len(parts) > 1 {
+		repoName = parts[len(parts)-2]
+	} else {
+		repoName = parts[0]
+	}
+	// the filename is used by protoc to set the namespace so try to make it unique
+	fname := fmt.Sprintf("%s_%s_%s.proto", ProtoPrefix, repoName, svcName)
+	path := filepath.Join(codegen.Gendir, "grpc", svcName, pbPkgName, fname)
 
 	sections := []*codegen.SectionTemplate{
 		// header comments
 		{
 			Name:   "proto-header",
 			Source: protoHeaderT,
-			Data: map[string]interface{}{
+			Data: map[string]any{
 				"Title":       fmt.Sprintf("%s protocol buffer definition", svc.Name()),
 				"ToolVersion": goa.Version(),
 			},
@@ -44,9 +57,10 @@ func protoFile(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File {
 		{
 			Name:   "proto-start",
 			Source: protoStartT,
-			Data: map[string]interface{}{
+			Data: map[string]any{
 				"ProtoVersion": ProtoVersion,
 				"Pkg":          pkgName(svc, svcName),
+				"Imports":      data.ProtoImports,
 			},
 		},
 		// service definition
@@ -62,10 +76,16 @@ func protoFile(genpkg string, svc *expr.GRPCServiceExpr) *codegen.File {
 		sections = append(sections, &codegen.SectionTemplate{Name: "grpc-message", Source: messageT, Data: m})
 	}
 
+	runProtoc := func(path string) error {
+		includes := svc.ServiceExpr.Meta["protoc:include"]
+		includes = append(includes, expr.Root.API.Meta["protoc:include"]...)
+		return protoc(path, includes)
+	}
+
 	return &codegen.File{
 		Path:             path,
 		SectionTemplates: sections,
-		FinalizeFunc:     protoc,
+		FinalizeFunc:     runProtoc,
 	}
 }
 
@@ -76,11 +96,23 @@ func pkgName(svc *expr.GRPCServiceExpr, svcName string) string {
 	return codegen.SnakeCase(svcName)
 }
 
-func protoc(path string) error {
+func protoc(path string, includes []string) error {
 	dir := filepath.Dir(path)
-	os.MkdirAll(dir, 0777)
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		return err
+	}
 
-	args := []string{"--proto_path", dir, "--go_out", dir, "--go-grpc_out", dir, "--go_opt=paths=source_relative", "--go-grpc_opt=paths=source_relative", path}
+	args := []string{
+		path,
+		"--proto_path", dir,
+		"--go_out", dir,
+		"--go-grpc_out", dir,
+		"--go_opt=paths=source_relative",
+		"--go-grpc_opt=paths=source_relative",
+	}
+	for _, include := range includes {
+		args = append(args, "-I", include)
+	}
 	cmd := exec.Command("protoc", args...)
 	cmd.Dir = filepath.Dir(path)
 
@@ -108,6 +140,9 @@ syntax = {{ printf "%q" .ProtoVersion }};
 package {{ .Pkg }};
 
 option go_package = "/{{ .Pkg }}pb";
+{{- range .Imports }}
+import "{{ . }}";
+{{- end }}
 `
 
 	// input: ServiceData

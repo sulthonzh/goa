@@ -47,6 +47,21 @@ func ObjectBodyDSL(svcName, metName string) func() {
 	}
 }
 
+func MapBodyDSL(svcName, metName string) func() {
+	return func() {
+		var _ = Service(svcName, func() {
+			Method(metName, func() {
+				Payload(func() {
+					Attribute("map", MapOf(String, Any))
+				})
+				HTTP(func() {
+					POST("/")
+				})
+			})
+		})
+	}
+}
+
 func StringResponseBodyDSL(svcName, metName string) func() {
 	return func() {
 		var _ = Service(svcName, func() {
@@ -70,6 +85,33 @@ func ObjectResponseBodyDSL(svcName, metName string) func() {
 				})
 				HTTP(func() {
 					POST("/")
+				})
+			})
+		})
+	}
+}
+
+func MultiCookieResponseBodyDSL(svcName, metName string) func() {
+	return func() {
+		var U = Type("U", func() {
+			Attribute("name")
+			Attribute("cookie")
+		})
+		var T = Type("T", func() {
+			Attribute("name")
+		})
+		var _ = Service(svcName, func() {
+			Method("other", func() {
+				Result(U)
+				HTTP(func() {
+					GET("/cookie")
+					Response(StatusOK, func() { Cookie("cookie") })
+				})
+			})
+			Method(metName, func() {
+				Result(T)
+				HTTP(func() {
+					GET("/")
 				})
 			})
 		})
@@ -130,6 +172,40 @@ func ObjectErrorResponseBodyDSL(svcName, metName string) func() {
 				HTTP(func() {
 					POST("/")
 					Response("bad", StatusBadRequest)
+				})
+			})
+		})
+	}
+}
+
+func ForcedTypeDSL(svcName, metName string) func() {
+	return func() {
+		var _ = Type("Forced", func() {
+			Attribute("foo")
+			Meta("type:generate:force")
+		})
+		var _ = Service(svcName, func() {
+			Method(metName, func() {
+				HTTP(func() {
+					POST("/")
+				})
+			})
+		})
+	}
+}
+
+func ForcedResultTypeDSL(svcName, metName string) func() {
+	return func() {
+		var _ = ResultType("Forced", func() {
+			Attributes(func() {
+				Attribute("foo")
+			})
+			Meta("type:generate:force")
+		})
+		var _ = Service(svcName, func() {
+			Method(metName, func() {
+				HTTP(func() {
+					POST("/")
 				})
 			})
 		})

@@ -10,7 +10,7 @@ func TestIsPrimitivePointer(t *testing.T) {
 	newObj := func(fieldName string, fieldType expr.DataType, req bool) *expr.AttributeExpr {
 		attr := &expr.AttributeExpr{
 			Type: &expr.Object{
-				&expr.NamedAttributeExpr{fieldName, &expr.AttributeExpr{Type: fieldType}},
+				&expr.NamedAttributeExpr{Name: fieldName, Attribute: &expr.AttributeExpr{Type: fieldType}},
 			},
 		}
 		if req {
@@ -58,7 +58,7 @@ func TestIsPrimitivePointer(t *testing.T) {
 			Context:  &AttributeContext{IgnoreRequired: true},
 			Attr:     newObj("foo", expr.String, false),
 			Name:     "foo",
-			Expected: false,
+			Expected: true,
 		},
 		{
 			Test:     "ignore required context with non pointer attribute",
