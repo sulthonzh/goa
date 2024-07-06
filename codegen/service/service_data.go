@@ -18,10 +18,19 @@ var Services = make(ServicesData)
 var (
 	// initTypeTmpl is the template used to render the code that initializes a
 	// projected type or viewed result type or a result type.
-	initTypeCodeTmpl = template.Must(template.New("initTypeCode").Funcs(template.FuncMap{"goify": codegen.Goify}).Parse(initTypeCodeT))
+	initTypeCodeTmpl = template.Must(
+		template.New("initTypeCode").
+			Funcs(template.FuncMap{"goify": codegen.Goify}).
+			Parse(readTemplate("return_type_init")),
+	)
+
 	// validateTypeCodeTmpl is the template used to render the code to
 	// validate a projected type or a viewed result type.
-	validateTypeCodeTmpl = template.Must(template.New("validateType").Funcs(template.FuncMap{"goify": codegen.Goify}).Parse(validateTypeT))
+	validateTypeCodeTmpl = template.Must(
+		template.New("validateType").
+			Funcs(template.FuncMap{"goify": codegen.Goify}).
+			Parse(readTemplate("type_validate")),
+	)
 )
 
 type (
@@ -41,6 +50,10 @@ type (
 		Name string
 		// Description is the service description.
 		Description string
+		// APIName is the name of the API the service belongs to.
+		APIName string
+		// APIVersion is the API version.
+		APIVersion string
 		// StructName is the service struct name.
 		StructName string
 		// VarName is the service variable name (first letter in lowercase).
@@ -747,6 +760,8 @@ func (d ServicesData) analyze(service *expr.ServiceExpr) *Data {
 	data := &Data{
 		Name:               service.Name,
 		Description:        desc,
+		APIName:            expr.Root.API.Name,
+		APIVersion:         expr.Root.API.Version,
 		VarName:            varName,
 		PathName:           codegen.SnakeCase(varName),
 		StructName:         codegen.Goify(service.Name, true),
@@ -1610,7 +1625,7 @@ func buildProjections(projected, att *expr.AttributeExpr, viewspkg string, scope
 	return projections
 }
 
-// buildValidationData builds the data required to generate validations for the
+// buildValidations builds the data required to generate validations for the
 // projected types.
 func buildValidations(projected *expr.AttributeExpr, scope *codegen.NameScope) []*ValidateData {
 	var (
@@ -1673,7 +1688,7 @@ func buildValidations(projected *expr.AttributeExpr, scope *codegen.NameScope) [
 					})
 					ctx = projectedTypeContext("", !expr.IsPrimitive(projected.Type), scope)
 				}
-				data["Validate"] = codegen.ValidationCode(&expr.AttributeExpr{Type: o, Validation: rt.Validation}, rt, ctx, true, false, "result")
+				data["Validate"] = codegen.ValidationCode(&expr.AttributeExpr{Type: o, Validation: rt.Validation}, rt, ctx, true, false, true, "result")
 				data["Fields"] = fields
 			}
 
@@ -1698,7 +1713,7 @@ func buildValidations(projected *expr.AttributeExpr, scope *codegen.NameScope) [
 			Name:        name,
 			Description: fmt.Sprintf("%s runs the validations defined on %s.", name, tname),
 			Ref:         scope.GoTypeRef(projected),
-			Validate:    codegen.ValidationCode(ut.Attribute(), ut, ctx, true, expr.IsAlias(ut), "result"),
+			Validate:    codegen.ValidationCode(ut.Attribute(), ut, ctx, true, expr.IsAlias(ut), true, "result"),
 		})
 	}
 	return validations
@@ -1816,80 +1831,3 @@ func removeMeta(att *expr.AttributeExpr) {
 		return nil
 	})
 }
-
-const (
-	initTypeCodeT = `{{ if or .ToResult .ToViewed }}
-	{{- if eq (len .Views) 1 }}
-		{{- with (index .Views 0) }}
-			{{- if $.ToViewed -}}
-	p := {{ $.InitName }}{{ if ne .Name "default" }}{{ goify .Name true }}{{ end }}({{ $.ArgVar }})
-	return {{ if not $.IsCollection }}&{{ end }}{{ $.TargetType }}{Projected: p, View: {{ printf "%q" .Name }} }
- 			{{- else -}}
-			return {{ $.InitName }}{{ if ne .Name "default" }}{{ goify .Name true }}{{ end }}({{ $.ArgVar }}.Projected)
-			{{- end }}
-		{{- end }}
-	{{- else -}}
-	var {{ .ReturnVar }} {{ .ReturnTypeRef }}
-	switch {{ if .ToResult }}{{ .ArgVar }}.View{{ else }}view{{ end }} {
-		{{- range .Views }}
-		case {{ printf "%q" .Name }}{{ if eq .Name "default" }}, ""{{ end }}:
-			{{- if $.ToViewed }}
-				p := {{ $.InitName }}{{ if ne .Name "default" }}{{ goify .Name true }}{{ end }}({{ $.ArgVar }})
-				{{ $.ReturnVar }} = {{ if not $.IsCollection }}&{{ end }}{{ $.TargetType }}{Projected: p, View: {{ printf "%q" .Name }} }
-			{{- else }}
-				{{ $.ReturnVar }} = {{ $.InitName }}{{ if ne .Name "default" }}{{ goify .Name true }}{{ end }}({{ $.ArgVar }}.Projected)
-			{{- end }}
-		{{- end }}
-	}
-	return {{ .ReturnVar }}
-	{{- end }}
-{{- else if .IsCollection -}}
-	{{ .ReturnVar }} := make({{ .TargetType }}, len({{ .ArgVar }}))
-	for i, n := range {{ .ArgVar }} {
-		{{ .ReturnVar }}[i] = {{ .InitName }}(n)
-	}
-	return {{ .ReturnVar }}
-{{- else -}}
-	{{ .Code }}
-	{{- range .Fields }}
-		if {{ $.Source }}.{{ .VarName }} != nil {
-			{{ $.Target }}.{{ .VarName }} = {{ .FieldInit }}({{ $.Source }}.{{ .VarName }})
-		}
-	{{- end }}
-	return {{ .ReturnVar }}
-{{- end }}`
-
-	validateTypeT = `{{- if .IsViewed -}}
-switch {{ .ArgVar }}.View {
-	{{- range .Views }}
-case {{ printf "%q" .Name }}{{ if eq .Name "default" }}, ""{{ end }}:
-	err = Validate{{ $.Projected }}{{ if ne .Name "default" }}{{ goify .Name true }}{{ end }}({{ $.ArgVar }}.Projected)
-	{{- end }}
-default:
-	err = goa.InvalidEnumValueError("view", {{ .Source }}.View, []any{ {{ range .Views }}{{ printf "%q" .Name }}, {{ end }} })
-}
-{{- else -}}
-	{{- if .IsCollection -}}
-for _, {{ $.Source }} := range {{ $.ArgVar }} {
-	if err2 := {{ .ValidateVar }}({{ $.Source }}); err2 != nil {
-		err = goa.MergeErrors(err, err2)
-	}
-}
-	{{- else -}}
-	{{ .Validate }}
-		{{- range .Fields -}}
-			{{- if .IsRequired -}}
-if {{ $.Source }}.{{ goify .Name true }} == nil {
-	err = goa.MergeErrors(err, goa.MissingFieldError({{ printf "%q" .Name }}, {{ printf "%q" $.Source }}))
-}
-			{{- end }}
-if {{ $.Source }}.{{ goify .Name true }} != nil {
-	if err2 := {{ .ValidateVar }}({{ $.Source }}.{{ goify .Name true }}); err2 != nil {
-		err = goa.MergeErrors(err, err2)
-	}
-}
-		{{- end -}}
-	{{- end -}}
-{{- end -}}
-`
-)

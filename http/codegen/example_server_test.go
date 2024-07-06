@@ -2,8 +2,14 @@ package codegen
 
 import (
 	"bytes"
-	"reflect"
+	"flag"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"goa.design/goa/v3/codegen"
 	"goa.design/goa/v3/codegen/example"
@@ -12,6 +18,27 @@ import (
 	"goa.design/goa/v3/expr"
 	"goa.design/goa/v3/http/codegen/testdata"
 )
+
+var updateGolden = false
+
+func init() {
+	flag.BoolVar(&updateGolden, "w", false, "update golden files")
+}
+
+func compareOrUpdateGolden(t *testing.T, code, golden string) {
+	t.Helper()
+	if updateGolden {
+		require.NoError(t, os.MkdirAll(filepath.Dir(golden), 0750))
+		require.NoError(t, os.WriteFile(golden, []byte(code), 0640))
+		return
+	}
+	data, err := os.ReadFile(golden)
+	require.NoError(t, err)
+	if runtime.GOOS == "windows" {
+		data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	}
+	assert.Equal(t, string(data), code)
+}
 
 func TestExampleServerFiles(t *testing.T) {
 	t.Run("package name check", func(t *testing.T) {
@@ -33,30 +60,21 @@ func TestExampleServerFiles(t *testing.T) {
 				service.Services = make(service.ServicesData)
 				example.Servers = make(example.ServersData)
 				codegen.RunDSL(t, c.DSL)
-				if len(expr.Root.Services) != 3 {
-					t.Fatalf("got %d services, expected 3", len(expr.Root.Services))
-				}
+				require.Len(t, expr.Root.Services, 3)
 				fs := ExampleServerFiles("", expr.Root)
-				if len(fs) != 2 {
-					t.Fatalf("got %d example files, expected 2", len(fs))
-				}
+				require.Len(t, fs, 2)
 				for i, f := range fs {
 					if i < len(fs)-1 {
 						// Skip example http server.
 						continue
 					}
-					if len(f.SectionTemplates) == 0 {
-						t.Fatalf("got empty templates, expected not empty")
-					}
+					require.Greater(t, len(f.SectionTemplates), 0)
 					var b bytes.Buffer
-					if err := f.SectionTemplates[0].Write(&b); err != nil {
-						t.Fatal(err)
-					}
-					if line, err := b.ReadBytes('\n'); err != nil {
-						t.Fatal(err)
-					} else if got := string(bytes.TrimRight(line, "\n")); !reflect.DeepEqual(got, c.Expected) {
-						t.Fatalf("got %s, expected %s", got, c.Expected)
-					}
+					require.NoError(t, f.SectionTemplates[0].Write(&b))
+					line, err := b.ReadBytes('\n')
+					assert.NoError(t, err)
+					got := string(bytes.TrimRight(line, "\n"))
+					assert.Equal(t, c.Expected, got)
 				}
 			})
 		}
@@ -66,13 +84,12 @@ func TestExampleServerFiles(t *testing.T) {
 		cases := []struct {
 			Name string
 			DSL  func()
-			Code string
 		}{
-			{"no-server", ctestdata.NoServerDSL, testdata.NoServerServerHandleCode},
-			{"server-hosting-service-with-file-server", ctestdata.ServerHostingServiceWithFileServerDSL, testdata.ServerHostingServiceWithFileServerHandlerCode},
-			{"server-hosting-service-subset", ctestdata.ServerHostingServiceSubsetDSL, testdata.ServerHostingServiceSubsetServerHandleCode},
-			{"server-hosting-multiple-services", ctestdata.ServerHostingMultipleServicesDSL, testdata.ServerHostingMultipleServicesServerHandleCode},
-			{"streaming", testdata.StreamingMultipleServicesDSL, testdata.StreamingServerHandleCode},
+			{"no-server", ctestdata.NoServerDSL},
+			{"server-hosting-service-with-file-server", ctestdata.ServerHostingServiceWithFileServerDSL},
+			{"server-hosting-service-subset", ctestdata.ServerHostingServiceSubsetDSL},
+			{"server-hosting-multiple-services", ctestdata.ServerHostingMultipleServicesDSL},
+			{"streaming", testdata.StreamingMultipleServicesDSL},
 		}
 		for _, c := range cases {
 			t.Run(c.Name, func(t *testing.T) {
@@ -82,22 +99,15 @@ func TestExampleServerFiles(t *testing.T) {
 				example.Servers = make(example.ServersData)
 				codegen.RunDSL(t, c.DSL)
 				fs := ExampleServerFiles("", expr.Root)
-				if len(fs) == 0 {
-					t.Fatalf("got 0 files, expected 1")
-				}
-				if len(fs[0].SectionTemplates) == 0 {
-					t.Fatalf("got 0 sections, expected at least 1")
-				}
+				require.Len(t, fs, 1)
+				require.Greater(t, len(fs[0].SectionTemplates), 0)
 				var buf bytes.Buffer
 				for _, s := range fs[0].SectionTemplates[1:] {
-					if err := s.Write(&buf); err != nil {
-						t.Fatal(err)
-					}
+					require.NoError(t, s.Write(&buf))
 				}
 				code := codegen.FormatTestCode(t, "package foo\n"+buf.String())
-				if code != c.Code {
-					t.Errorf("invalid code for %s: got\n%s\ngot vs. expected:\n%s", fs[0].Path, code, codegen.Diff(t, code, c.Code))
-				}
+				golden := filepath.Join("testdata", "server-"+c.Name+".golden")
+				compareOrUpdateGolden(t, code, golden)
 			})
 		}
 	})

@@ -3,6 +3,8 @@ package codegen
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"goa.design/goa/v3/codegen"
 	"goa.design/goa/v3/expr"
 	"goa.design/goa/v3/http/codegen/testdata"
@@ -21,6 +23,7 @@ func TestClientCLIFiles(t *testing.T) {
 		{"simple-parse", testdata.MultiSimpleDSL, testdata.MultiSimpleParseCode, 0, 3},
 		{"multi-parse", testdata.MultiDSL, testdata.MultiParseCode, 0, 3},
 		{"multi-required-payload", testdata.MultiRequiredPayloadDSL, testdata.MultiRequiredPayloadParseCode, 0, 3},
+		{"skip-request-body-encode-decode", testdata.SkipRequestBodyEncodeDecodeDSL, testdata.SkipRequestBodyEncodeDecodeParseCode, 0, 3},
 		{"streaming-parse", testdata.StreamingMultipleServicesDSL, testdata.StreamingParseCode, 0, 3},
 		{"simple-build", testdata.MultiSimpleDSL, testdata.MultiSimpleBuildCode, 1, 1},
 		{"multi-build", testdata.MultiDSL, testdata.MultiBuildCode, 1, 1},
@@ -55,9 +58,7 @@ func TestClientCLIFiles(t *testing.T) {
 			fs := ClientCLIFiles("", expr.Root)
 			sections := fs[c.FileIndex].SectionTemplates
 			code := codegen.SectionCode(t, sections[c.SectionIndex])
-			if code != c.Code {
-				t.Errorf("invalid code, got:\n%s\ngot vs. expected:\n%s", code, codegen.Diff(t, code, c.Code))
-			}
+			assert.Equal(t, c.Code, code)
 		})
 	}
 }

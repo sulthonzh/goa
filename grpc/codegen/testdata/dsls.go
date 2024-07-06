@@ -628,6 +628,20 @@ var PayloadWithMultipleUseTypesDSL = func() {
 	})
 }
 
+var PayloadWithCustomTypePackageDSL = func() {
+	var CustomType = Type("CustomType", func() {
+		Field(1, "Field", Int)
+		Meta("struct:pkg:path", "types")
+	})
+	Service("ServicePayloadWithCustomTypePackage", func() {
+		Method("MethodPayloadWithCustomTypePackage", func() {
+			Payload(CustomType)
+			Result(CustomType)
+			GRPC(func() {})
+		})
+	})
+}
+
 var PayloadWithAliasTypeDSL = func() {
 	var IntAlias = Type("IntAlias", Int)
 	var PayloadAliasT = Type("PayloadAliasT", func() {
@@ -971,6 +985,26 @@ var DefaultFieldsDSL = func() {
 				Field(13, "flt1", Float64, func() { Default(1.0) })
 				Required("req", "reqs", "rat")
 			})
+			GRPC(func() {})
+		})
+	})
+}
+
+var CustomMessageNameDSL = func() {
+	var CustomType = Type("CustomType", func() {
+		Meta("struct:name:proto", "CustomType")
+		Field(1, "a", Int)
+		Field(2, "b", String)
+	})
+	Service("CustomMessageName", func() {
+		Method("Unary", func() {
+			Payload(CustomType)
+			Result(CustomType)
+			GRPC(func() {})
+		})
+		Method("Stream", func() {
+			StreamingPayload(CustomType)
+			StreamingResult(CustomType)
 			GRPC(func() {})
 		})
 	})

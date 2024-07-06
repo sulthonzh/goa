@@ -2,58 +2,77 @@ package example
 
 import (
 	"bytes"
+	"flag"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"goa.design/goa/v3/codegen"
 	"goa.design/goa/v3/codegen/example/testdata"
 	"goa.design/goa/v3/codegen/service"
-	ctestdata "goa.design/goa/v3/codegen/service/testdata"
 	"goa.design/goa/v3/expr"
 )
+
+// updateGolden is true when -w is passed to `go test`, e.g. `go test ./... -w`
+var updateGolden = false
+
+func init() {
+	flag.BoolVar(&updateGolden, "w", false, "update golden files")
+}
+
+func compareOrUpdateGolden(t *testing.T, code, golden string) {
+	t.Helper()
+	if updateGolden {
+		require.NoError(t, os.MkdirAll(filepath.Dir(golden), 0750))
+		require.NoError(t, os.WriteFile(golden, []byte(code), 0640))
+		return
+	}
+	data, err := os.ReadFile(golden)
+	require.NoError(t, err)
+	if runtime.GOOS == "windows" {
+		data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	}
+	assert.Equal(t, string(data), code)
+}
 
 func TestExampleServerFiles(t *testing.T) {
 	cases := []struct {
 		Name string
 		DSL  func()
-		Code string
 	}{
-		{"no-server", testdata.NoServerDSL, testdata.NoServerServerMainCode},
-		{"same-api-service-name", testdata.SameAPIServiceNameDSL, testdata.SameAPIServiceNameServerMainCode},
-		{"single-server-single-host", testdata.SingleServerSingleHostDSL, testdata.SingleServerSingleHostServerMainCode},
-		{"single-server-single-host-with-variables", testdata.SingleServerSingleHostWithVariablesDSL, testdata.SingleServerSingleHostWithVariablesServerMainCode},
-		{"server-hosting-service-with-file-server", testdata.ServerHostingServiceWithFileServerDSL, testdata.ServerHostingServiceWithFileServerServerMainCode},
-		{"server-hosting-service-subset", testdata.ServerHostingServiceSubsetDSL, testdata.ServerHostingServiceSubsetServerMainCode},
-		{"server-hosting-multiple-services", testdata.ServerHostingMultipleServicesDSL, testdata.ServerHostingMultipleServicesServerMainCode},
-		{"single-server-multiple-hosts", testdata.SingleServerMultipleHostsDSL, testdata.SingleServerMultipleHostsServerMainCode},
-		{"single-server-multiple-hosts-with-variables", testdata.SingleServerMultipleHostsWithVariablesDSL, testdata.SingleServerMultipleHostsWithVariablesServerMainCode},
-		{"service-name-with-spaces", ctestdata.NamesWithSpacesDSL, testdata.NamesWithSpacesServerMainCode},
-		{"service-for-only-http", testdata.ServiceForOnlyHTTPDSL, testdata.ServiceForOnlyHTTPServerMainCode},
-		{"sercice-for-only-grpc", testdata.ServiceForOnlyGRPCDSL, testdata.ServiceForOnlyGRPCServerMainCode},
-		{"service-for-http-and-part-of-grpc", testdata.ServiceForHTTPAndPartOfGRPCDSL, testdata.ServiceForHTTPAndPartOfGRPCServerMainCode},
+		{"no-server", testdata.NoServerDSL},
+		{"same-api-service-name", testdata.SameAPIServiceNameDSL},
+		{"single-server-single-host", testdata.SingleServerSingleHostDSL},
+		{"single-server-single-host-with-variables", testdata.SingleServerSingleHostWithVariablesDSL},
+		{"server-hosting-service-with-file-server", testdata.ServerHostingServiceWithFileServerDSL},
+		{"server-hosting-service-subset", testdata.ServerHostingServiceSubsetDSL},
+		{"server-hosting-multiple-services", testdata.ServerHostingMultipleServicesDSL},
+		{"single-server-multiple-hosts", testdata.SingleServerMultipleHostsDSL},
+		{"single-server-multiple-hosts-with-variables", testdata.SingleServerMultipleHostsWithVariablesDSL},
+		{"service-name-with-spaces", testdata.NamesWithSpacesDSL},
+		{"service-for-only-http", testdata.ServiceForOnlyHTTPDSL},
+		{"sercice-for-only-grpc", testdata.ServiceForOnlyGRPCDSL},
+		{"service-for-http-and-part-of-grpc", testdata.ServiceForHTTPAndPartOfGRPCDSL},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
-			// reset global variable
 			service.Services = make(service.ServicesData)
 			Servers = make(ServersData)
 			codegen.RunDSL(t, c.DSL)
 			fs := ServerFiles("", expr.Root)
-			if len(fs) == 0 {
-				t.Fatalf("got 0 files, expected 1")
-			}
-			if len(fs[0].SectionTemplates) == 0 {
-				t.Fatalf("got 0 sections, expected at least 1")
-			}
+			require.Len(t, fs, 1)
+			require.Greater(t, len(fs[0].SectionTemplates), 0)
 			var buf bytes.Buffer
 			for _, s := range fs[0].SectionTemplates[1:] {
-				if err := s.Write(&buf); err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, s.Write(&buf))
 			}
 			code := codegen.FormatTestCode(t, "package foo\n"+buf.String())
-			if code != c.Code {
-				t.Errorf("invalid code for %s: got\n%s\ngot vs. expected:\n%s", fs[0].Path, code, codegen.Diff(t, code, c.Code))
-			}
+			golden := filepath.Join("testdata", "server-"+c.Name+".golden")
+			compareOrUpdateGolden(t, code, golden)
 		})
 	}
 }

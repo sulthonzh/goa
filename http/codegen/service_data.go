@@ -20,17 +20,25 @@ var HTTPServices = make(ServicesData)
 
 var (
 	// pathInitTmpl is the template used to render path constructors code.
-	pathInitTmpl = template.Must(template.New("path-init").Funcs(template.FuncMap{"goify": codegen.Goify}).Parse(pathInitT))
+	pathInitTmpl = template.Must(
+		template.New("path-init").
+			Funcs(template.FuncMap{"goify": codegen.Goify}).
+			Parse(readTemplate("path_init", "query_slice_conversion")),
+	)
 	// requestInitTmpl is the template used to render request constructors.
-	requestInitTmpl = template.Must(template.New("request-init").Funcs(template.FuncMap{
-		"goTypeRef": func(dt expr.DataType, svc string) string {
-			return service.Services.Get(svc).Scope.GoTypeRef(&expr.AttributeExpr{Type: dt})
-		},
-		"isAliased": func(dt expr.DataType) bool {
-			_, ok := dt.(expr.UserType)
-			return ok
-		},
-	}).Parse(requestInitT))
+	requestInitTmpl = template.Must(
+		template.New("request-init").
+			Funcs(template.FuncMap{
+				"goTypeRef": func(dt expr.DataType, svc string) string {
+					return service.Services.Get(svc).Scope.GoTypeRef(&expr.AttributeExpr{Type: dt})
+				},
+				"isAliased": func(dt expr.DataType) bool {
+					_, ok := dt.(expr.UserType)
+					return ok
+				},
+			}).
+			Parse(readTemplate("request_init")),
+	)
 )
 
 type (
@@ -1059,7 +1067,7 @@ func buildPayloadData(e *expr.HTTPEndpointExpr, sd *ServiceData) *PayloadData {
 			}
 			if !mustValidate {
 				for _, q := range queryData {
-					if q.Validate != "" || q.Required || needConversion(q.Type) {
+					if q.Map || q.Validate != "" || q.Required || needConversion(q.Type) {
 						mustValidate = true
 						break
 					}
@@ -1131,8 +1139,8 @@ func buildPayloadData(e *expr.HTTPEndpointExpr, sd *ServiceData) *PayloadData {
 			)
 			if ut, ok := body.(expr.UserType); ok {
 				if val := ut.Attribute().Validation; val != nil {
-					svcode = codegen.ValidationCode(ut.Attribute(), ut, httpsvrctx, true, expr.IsAlias(ut), "body")
-					cvcode = codegen.ValidationCode(ut.Attribute(), ut, httpclictx, true, expr.IsAlias(ut), "body")
+					svcode = codegen.ValidationCode(ut.Attribute(), ut, httpsvrctx, true, expr.IsAlias(ut), false, "body")
+					cvcode = codegen.ValidationCode(ut.Attribute(), ut, httpclictx, true, expr.IsAlias(ut), false, "body")
 				}
 			}
 			serverArgs = []*InitArgData{{
@@ -1272,7 +1280,7 @@ func buildPayloadData(e *expr.HTTPEndpointExpr, sd *ServiceData) *PayloadData {
 							TypeRef:      uref,
 							Type:         uatt.Type,
 							Pointer:      sc.UsernamePointer,
-							Validate:     codegen.ValidationCode(uatt, nil, httpsvrctx, sc.UsernameRequired, expr.IsAlias(uatt.Type), sc.UsernameAttr),
+							Validate:     codegen.ValidationCode(uatt, nil, httpsvrctx, sc.UsernameRequired, expr.IsAlias(uatt.Type), false, sc.UsernameAttr),
 							Example:      uatt.Example(expr.Root.API.ExampleGenerator),
 						},
 					}
@@ -1295,7 +1303,7 @@ func buildPayloadData(e *expr.HTTPEndpointExpr, sd *ServiceData) *PayloadData {
 							TypeRef:      pref,
 							Type:         patt.Type,
 							Pointer:      sc.PasswordPointer,
-							Validate:     codegen.ValidationCode(patt, nil, httpsvrctx, sc.PasswordRequired, expr.IsAlias(patt.Type), sc.PasswordAttr),
+							Validate:     codegen.ValidationCode(patt, nil, httpsvrctx, sc.PasswordRequired, expr.IsAlias(patt.Type), false, sc.PasswordAttr),
 							Example:      patt.Example(expr.Root.API.ExampleGenerator),
 						},
 					}
@@ -1609,7 +1617,7 @@ func buildResponses(e *expr.HTTPEndpointExpr, result *expr.AttributeExpr, viewed
 							var vcode string
 							if ut, ok := resp.Body.Type.(expr.UserType); ok {
 								if val := ut.Attribute().Validation; val != nil {
-									vcode = codegen.ValidationCode(ut.Attribute(), ut, httpclictx, true, expr.IsAlias(ut), "body")
+									vcode = codegen.ValidationCode(ut.Attribute(), ut, httpclictx, true, expr.IsAlias(ut), false, "body")
 								}
 							}
 							clientArgs = []*InitArgData{{
@@ -2000,7 +2008,7 @@ func buildRequestBodyType(body, att *expr.AttributeExpr, e *expr.HTTPEndpointExp
 				varname, svc.Name, e.Name())
 			if svr {
 				// generate validation code for unmarshaled type (server-side).
-				validateDef = codegen.ValidationCode(ut.Attribute(), ut, httpctx, true, expr.IsAlias(ut), "body")
+				validateDef = codegen.ValidationCode(ut.Attribute(), ut, httpctx, true, expr.IsAlias(ut), false, "body")
 				if validateDef != "" {
 					validateRef = fmt.Sprintf("err = Validate%s(&body)", varname)
 				}
@@ -2015,7 +2023,7 @@ func buildRequestBodyType(body, att *expr.AttributeExpr, e *expr.HTTPEndpointExp
 			}
 			varname = sd.Scope.GoTypeRef(body)
 			ctx := codegen.NewAttributeContext(false, false, !svr, "", sd.Scope)
-			validateRef = codegen.ValidationCode(body, nil, ctx, true, expr.IsAlias(body.Type), "body")
+			validateRef = codegen.ValidationCode(body, nil, ctx, true, expr.IsAlias(body.Type), false, "body")
 			desc = body.Description
 		}
 	}
@@ -2150,7 +2158,7 @@ func buildResponseBodyType(body, att *expr.AttributeExpr, loc *codegen.Location,
 				varname, svc.Name, e.Name())
 			if !svr && view == nil {
 				// generate validation code for unmarshaled type (client-side).
-				validateDef = codegen.ValidationCode(body, ut, httpctx, true, expr.IsAlias(body.Type), "body")
+				validateDef = codegen.ValidationCode(body, ut, httpctx, true, expr.IsAlias(body.Type), false, "body")
 				if validateDef != "" {
 					target := "&body"
 					if expr.IsArray(ut) {
@@ -2167,12 +2175,12 @@ func buildResponseBodyType(body, att *expr.AttributeExpr, loc *codegen.Location,
 			desc = fmt.Sprintf("%s is the type of the %q service %q endpoint HTTP response body.",
 				varname, svc.Name, e.Name())
 			def = goTypeDef(sd.Scope, body, !svr, svr)
-			validateRef = codegen.ValidationCode(body, nil, httpctx, true, expr.IsAlias(body.Type), "body")
+			validateRef = codegen.ValidationCode(body, nil, httpctx, true, expr.IsAlias(body.Type), false, "body")
 		} else {
 			// response body is a primitive type. They are used as non-pointers when
 			// encoding/decoding responses.
 			httpctx = httpContext("", sd.Scope, false, true)
-			validateRef = codegen.ValidationCode(body, nil, httpctx, true, expr.IsAlias(body.Type), "body")
+			validateRef = codegen.ValidationCode(body, nil, httpctx, true, expr.IsAlias(body.Type), false, "body")
 			varname = sd.Scope.GoTypeRef(body)
 			desc = body.Description
 		}
@@ -2619,7 +2627,7 @@ func attributeTypeData(ut expr.UserType, req, ptr, server bool, rd *ServiceData)
 		if req || !req && !server {
 			// generate validations for responses client-side and for
 			// requests server-side and CLI
-			validate = codegen.ValidationCode(ut.Attribute(), ut, hctx, true, expr.IsAlias(ut), "body")
+			validate = codegen.ValidationCode(ut.Attribute(), ut, hctx, true, expr.IsAlias(ut), false, "body")
 		}
 		if validate != "" {
 			validateRef = fmt.Sprintf("err = Validate%s(v)", name)
@@ -2726,17 +2734,28 @@ func needConversion(dt expr.DataType) bool {
 
 // AddMarshalTags adds JSON, XML and Form tags to all inline object attributes recursively.
 func AddMarshalTags(att *expr.AttributeExpr, seen map[string]struct{}) {
-	if !expr.IsObject(att.Type) {
-		return
-	}
 	if ut, ok := att.Type.(expr.UserType); ok {
 		if _, ok := seen[ut.Hash()]; ok {
 			return // avoid infinite recursions
 		}
 		seen[ut.Hash()] = struct{}{}
-		for _, att := range *(expr.AsObject(att.Type)) {
-			AddMarshalTags(att.Attribute, seen)
+		if expr.IsObject(ut.Attribute().Type) {
+			for _, att := range *(expr.AsObject(att.Type)) {
+				AddMarshalTags(att.Attribute, seen)
+			}
 		}
+		return
+	}
+	if expr.IsArray(att.Type) {
+		AddMarshalTags(expr.AsArray(att.Type).ElemType, seen)
+		return
+	}
+	if expr.IsMap(att.Type) {
+		AddMarshalTags(expr.AsMap(att.Type).KeyType, seen)
+		AddMarshalTags(expr.AsMap(att.Type).ElemType, seen)
+		return
+	}
+	if !expr.IsObject(att.Type) {
 		return
 	}
 	// inline object
@@ -2798,108 +2817,3 @@ func needStream(data []*ServiceData) bool {
 	}
 	return false
 }
-
-const (
-	// pathInitT is the template used to render the code of path constructors.
-	pathInitT = `
-{{- if .Args }}
-	{{- range $i, $arg := .Args }}
-		{{- $typ := (index $.PathParams $i).Attribute.Type }}
-		{{- if eq $typ.Name "array" }}
-	{{ .VarName }}Slice := make([]string, len({{ .VarName }}))
-	for i, v := range {{ .VarName }} {
-		{{ .VarName }}Slice[i] = {{ template "slice_conversion" $typ.ElemType.Type.Name }}
-	}
-		{{- end }}
-	{{- end }}
-	return fmt.Sprintf("{{ .PathFormat }}", {{ range $i, $arg := .Args }}
-	{{- if eq (index $.PathParams $i).Attribute.Type.Name "array" }}strings.Join({{ .VarName }}Slice, ",")
-	{{- else }}{{ .VarName }}
-	{{- end }}, {{ end }})
-{{- else }}
-	return "{{ .PathFormat }}"
-{{- end }}
-
-{{- define "slice_conversion" }}
-	{{- if eq . "string" }} url.QueryEscape(v)
-	{{- else if eq . "int" "int32" }} strconv.FormatInt(int64(v), 10)
-	{{- else if eq . "int64" }} strconv.FormatInt(v, 10)
-	{{- else if eq . "uint" "uint32" }} strconv.FormatUint(uint64(v), 10)
-	{{- else if eq . "uint64" }} strconv.FormatUint(v, 10)
-	{{- else if eq . "float32" }} strconv.FormatFloat(float64(v), 'f', -1, 32)
-	{{- else if eq . "float64" }} strconv.FormatFloat(v, 'f', -1, 64)
-	{{- else if eq . "boolean" }} strconv.FormatBool(v)
-	{{- else if eq . "bytes" }} url.QueryEscape(string(v))
-	{{- else }} url.QueryEscape(fmt.Sprintf("%v", v))
-	{{- end }}
-{{- end }}`
-
-	// requestInitT is the template used to render the code of HTTP
-	// request constructors.
-	requestInitT = `
-{{- if or .Args .RequestStruct }}
-	var (
-	{{- range .Args }}
-		{{ .VarName }} {{ .TypeRef }}
-	{{- end }}
-	{{- if .RequestStruct }}
-		body io.Reader
-	{{- end }}
-	)
-{{- end }}
-{{- if and .PayloadRef .Args }}
-	{
-	{{- if .RequestStruct }}
-		rd, ok := v.(*{{ .RequestStruct }})
-		if !ok {
-			return nil, goahttp.ErrInvalidType("{{ .ServiceName }}", "{{ .EndpointName }}", "{{ .RequestStruct }}", v)
-		}
-		p := rd.Payload
-		body = rd.Body
-	{{- else }}
-		p, ok := v.({{ .PayloadRef }})
-		if !ok {
-			return nil, goahttp.ErrInvalidType("{{ .ServiceName }}", "{{ .EndpointName }}", "{{ .PayloadRef }}", v)
-		}
-	{{- end }}
-	{{- range .Args }}
-		{{- if .Pointer }}
-		if p{{ if $.HasFields }}.{{ .FieldName }}{{ end }} != nil {
-		{{- end }}
-			{{- if (isAliased .FieldType) }}
-			{{ .VarName }} = {{ goTypeRef .Type $.ServiceName }}({{ if .Pointer }}*{{ end }}p{{ if $.HasFields }}.{{ .FieldName }}{{ end }})
-			{{- else }}
-			{{ .VarName }} = {{ if .Pointer }}*{{ end }}p{{ if $.HasFields }}.{{ .FieldName }}{{ end }}
-			{{- end }}
-		{{- if .Pointer }}
-		}
-		{{- end }}
-	{{- end }}
-	}
-{{- else if .RequestStruct }}
-		rd, ok := v.(*{{ .RequestStruct }})
-		if !ok {
-			return nil, goahttp.ErrInvalidType("{{ .ServiceName }}", "{{ .EndpointName }}", "{{ .RequestStruct }}", v)
-		}
-		body = rd.Body
-{{- end }}
-	{{- if .IsStreaming }}
-		scheme := c.scheme
-		switch c.scheme {
-		case "http":
-			scheme = "ws"
-		case "https":
-			scheme = "wss"
-		}
-	{{- end }}
-	u := &url.URL{Scheme: {{ if .IsStreaming }}scheme{{ else }}c.scheme{{ end }}, Host: c.host, Path: {{ .PathInit.Name }}({{ range .Args }}{{ .Ref }}, {{ end }})}
-	req, err := http.NewRequest("{{ .Verb }}", u.String(), {{ if .RequestStruct }}body{{ else }}nil{{ end }})
-	if err != nil {
-		return nil, goahttp.ErrInvalidURL("{{ .ServiceName }}", "{{ .EndpointName }}", u.String(), err)
-	}
-	if ctx != nil {
-		req = req.WithContext(ctx)
-	}
-
-	return req, nil`
-)

@@ -1,6 +1,8 @@
 package expr_test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"goa.design/goa/v3/eval"
@@ -15,10 +17,11 @@ func TestHTTPRouteValidation(t *testing.T) {
 		Error string
 	}{
 		{"valid", testdata.ValidRouteDSL, ""},
-		{"invalid", testdata.DuplicateWCRouteDSL, `route POST "/{id}" of service "InvalidRoute" HTTP endpoint "Method": Wildcard "id" appears multiple times in full path "/{id}/{id}"`},
+		{"duplicate-wc-route", testdata.DuplicateWCRouteDSL, `route POST "/{id}" of service "DuplicateWCRoute" HTTP endpoint "Method": Wildcard "id" appears multiple times in full path "/{id}/{id}"`},
 		{"disallow-response-body", testdata.DisallowResponseBodyHeadDSL, `route HEAD "/" of service "DisallowResponseBody" HTTP endpoint "Method": HTTP status 200: Response body defined for HEAD method which does not allow response body.
 route HEAD "/" of service "DisallowResponseBody" HTTP endpoint "Method": HTTP status 404: Response body defined for HEAD method which does not allow response body.`,
 		},
+		{"invalid", testdata.InvalidRouteDSL, "invalid use of POST in service \"InvalidRoute\""},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {
@@ -26,7 +29,7 @@ route HEAD "/" of service "DisallowResponseBody" HTTP endpoint "Method": HTTP st
 				expr.RunDSL(t, c.DSL)
 			} else {
 				err := expr.RunInvalidDSL(t, c.DSL)
-				if err.Error() != c.Error {
+				if !strings.HasSuffix(err.Error(), c.Error) {
 					t.Errorf("got error %q\nexpected %q", err.Error(), c.Error)
 				}
 			}
@@ -183,20 +186,21 @@ service "Service" HTTP endpoint "MethodC": HTTP endpoint request body must be em
 			if c.Error == "" {
 				expr.RunDSL(t, c.DSL)
 			} else {
-				var errors []error
+				var errs []error
 				err := expr.RunInvalidDSL(t, c.DSL)
 				if err != nil {
-					if merr, ok := err.(eval.MultiError); ok {
+					var merr eval.MultiError
+					if errors.As(err, &merr) {
 						for _, e := range merr {
-							errors = append(errors, e.GoError)
+							errs = append(errs, e.GoError)
 						}
 					} else {
-						errors = append(errors, err)
+						errs = append(errs, err)
 					}
 				}
-				if len(errors) > 1 || len(errors) == 0 {
-					t.Errorf("got %d errors, expected 1", len(errors))
-				} else if errors[0].Error() != c.Error {
+				if len(errs) > 1 || len(errs) == 0 {
+					t.Errorf("got %d errors, expected 1", len(errs))
+				} else if errs[0].Error() != c.Error {
 					t.Errorf("got `%s`, expected `%s`", err.Error(), c.Error)
 				}
 			}

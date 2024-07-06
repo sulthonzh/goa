@@ -29,7 +29,7 @@ type (
 		Fault bool
 		// History tracks all the individual errors that were built into this error, should
 		// this error have been merged.
-		history []ServiceError
+		history []*ServiceError
 		// err holds the original error if exists.
 		err error
 	}
@@ -56,6 +56,9 @@ const (
 	InvalidRange = "invalid_range"
 	// InvalidLength is the error name for invalid length errors.
 	InvalidLength = "invalid_length"
+	// UnsupportedMediaType is the error name returned by the Goa decoder
+	// when the content type of the HTTP request body is not supported.
+	UnsupportedMediaType = "unsupported_media_type"
 )
 
 // NewServiceError creates an error.
@@ -114,6 +117,12 @@ func MissingPayloadError() error {
 // body cannot be decoded successfully.
 func DecodePayloadError(msg string) error {
 	return PermanentError("decode_payload", msg)
+}
+
+// UnsupportedMediaTypeError is the error produced by the Goa decoder when the
+// content type of the HTTP request body is not supported.
+func UnsupportedMediaTypeError(ct string) error {
+	return PermanentError(UnsupportedMediaType, "unsupported media type %s", ct)
 }
 
 // InvalidFieldTypeError is the error produced by the generated code when the
@@ -238,12 +247,12 @@ func MergeErrors(err, other error) error {
 }
 
 // History returns the history of error revisions, ignoring the result of any merges.
-func (e ServiceError) History() []ServiceError {
+func (e *ServiceError) History() []*ServiceError {
 	if len(e.history) > 0 {
 		return e.history
 	}
 
-	return []ServiceError{e}
+	return []*ServiceError{e}
 }
 
 // Error returns the error message.
@@ -276,8 +285,8 @@ func newError(name string, timeout, temporary, fault bool, format string, v ...a
 }
 
 func asError(err error) *ServiceError {
-	e, ok := err.(*ServiceError)
-	if !ok {
+	var e *ServiceError
+	if !errors.As(err, &e) {
 		return &ServiceError{
 			Name:    "error",
 			ID:      NewErrorID(),

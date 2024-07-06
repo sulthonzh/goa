@@ -535,6 +535,60 @@ var PathWithWildcardDSL = func() {
 	})
 }
 
+var PathWithMultipleWildcardDSL = func() {
+	Service("test service", func() {
+		Method("test endpoint", func() {
+			Payload(func() {
+				Attribute("foo", Int)
+				Attribute("bar", Int)
+			})
+			HTTP(func() {
+				POST("/{bar}")
+			})
+		})
+		HTTP(func() {
+			Path("/{foo}")
+		})
+	})
+}
+
+var PathWithMultipleExplicitWildcardDSL = func() {
+	Service("test service", func() {
+		Method("test endpoint", func() {
+			Payload(func() {
+				Attribute("foo", Int)
+				Attribute("bar", Int)
+			})
+			HTTP(func() {
+				POST("/{bar}")
+				Param("bar")
+			})
+		})
+		HTTP(func() {
+			Path("/{foo}")
+			Param("foo")
+		})
+	})
+}
+
+var HeadersDSL = func() {
+	Service("test service", func() {
+		Method("test endpoint", func() {
+			Payload(func() {
+				Attribute("foo", Int)
+				Attribute("bar", Int)
+			})
+			HTTP(func() {
+				POST("/")
+				Header("bar")
+			})
+		})
+		HTTP(func() {
+			Header("foo")
+		})
+	})
+}
+
 var WithTagsDSL = func() {
 	Service("test service", func() {
 		HTTP(func() {
@@ -753,6 +807,107 @@ var NotGenerateHostDSL = func() {
 			HTTP(func() {
 				GET("/")
 			})
+		})
+	})
+}
+
+var NotGenerateAttributeDSL = func() {
+	var _ = API("test", func() {
+		Server("test", func() {
+			Host("localhost", func() {
+				URI("https://goa.design")
+			})
+		})
+	})
+	var PayloadT = Type("Payload", func() {
+		Attribute("int", Int, func() {
+			Meta("openapi:generate", "false")
+		})
+		Attribute("string", String, func() {
+			Example("")
+		})
+		Attribute("required_int", Int, func() {
+			Meta("openapi:generate", "false")
+		})
+		Attribute("required_string", String, func() {
+			Example("")
+		})
+		Required("required_int", "required_string")
+	})
+	var ResultT = Type("Result", func() {
+		Attribute("int", Int, func() {
+			Example(0)
+		})
+		Attribute("string", String, func() {
+			Meta("openapi:generate", "false")
+		})
+		Attribute("required_int", Int, func() {
+			Example(0)
+		})
+		Attribute("required_string", String, func() {
+			Meta("openapi:generate", "false")
+		})
+		Required("required_int", "required_string")
+	})
+	Service("testService", func() {
+		Method("testEndpoint", func() {
+			Payload(PayloadT)
+			Result(ResultT)
+			HTTP(func() {
+				GET("/")
+			})
+		})
+	})
+}
+
+var JSONPrefixDSL = func() {
+	var _ = API("test", func() {
+		Server("test", func() {
+			Host("localhost", func() {
+				URI("https://goa.design")
+			})
+		})
+		Meta("openapi:json:prefix", "  ")
+	})
+	var _ = Service("service-name", func() {
+		Files("path1", "filename")
+		Files("path2", "filename", func() {
+			Meta("openapi:tag:user-tag")
+		})
+	})
+}
+
+var JSONIndentDSL = func() {
+	var _ = API("test", func() {
+		Server("test", func() {
+			Host("localhost", func() {
+				URI("https://goa.design")
+			})
+		})
+		Meta("openapi:json:indent", "  ")
+	})
+	var _ = Service("service-name", func() {
+		Files("path1", "filename")
+		Files("path2", "filename", func() {
+			Meta("openapi:tag:user-tag")
+		})
+	})
+}
+
+var JSONPrefixIndentDSL = func() {
+	var _ = API("test", func() {
+		Server("test", func() {
+			Host("localhost", func() {
+				URI("https://goa.design")
+			})
+		})
+		Meta("openapi:json:prefix", " ")
+		Meta("openapi:json:indent", "  ")
+	})
+	var _ = Service("service-name", func() {
+		Files("path1", "filename")
+		Files("path2", "filename", func() {
+			Meta("openapi:tag:user-tag")
 		})
 	})
 }

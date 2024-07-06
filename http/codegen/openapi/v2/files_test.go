@@ -40,9 +40,16 @@ func TestSections(t *testing.T) {
 		{"with-spaces", testdata.WithSpacesDSL},
 		{"with-map", testdata.WithMapDSL},
 		{"path-with-wildcards", testdata.PathWithWildcardDSL},
+		{"path-with-multiple-wildcards", testdata.PathWithMultipleWildcardDSL},
+		{"path-with-multiple-explicit-wildcards", testdata.PathWithMultipleExplicitWildcardDSL},
+		{"headers", testdata.HeadersDSL},
 		{"typename", testdata.TypenameDSL},
 		{"not-generate-server", testdata.NotGenerateServerDSL},
 		{"not-generate-host", testdata.NotGenerateHostDSL},
+		{"not-generate-attribute", testdata.NotGenerateAttributeDSL},
+		{"json-prefix", testdata.JSONPrefixDSL},
+		{"json-indent", testdata.JSONIndentDSL},
+		{"json-prefix-indent", testdata.JSONPrefixIndentDSL},
 	}
 	for _, c := range cases {
 		t.Run(c.Name, func(t *testing.T) {

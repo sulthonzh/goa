@@ -62,10 +62,6 @@ func New(root *expr.RootExpr) *OpenAPI {
 
 // buildInfo builds the OpenAPI Info object.
 func buildInfo(api *expr.APIExpr) *Info {
-	ver := api.Version
-	if ver == "" {
-		ver = "1.0" // cannot be empty as per OpenAPI spec
-	}
 	title := api.Title
 	if title == "" {
 		title = "Goa API" // cannot be empty as per OpenAPI spec
@@ -74,7 +70,7 @@ func buildInfo(api *expr.APIExpr) *Info {
 		Title:          title,
 		Description:    api.Description,
 		TermsOfService: api.TermsOfService,
-		Version:        ver,
+		Version:        api.Version,
 		Extensions:     openapi.ExtensionsFromExpr(api.Meta),
 	}
 	if c := api.Contact; c != nil {
@@ -123,19 +119,18 @@ func buildComponents(root *expr.RootExpr, types map[string]*openapi.Schema) *Com
 func buildPaths(h *expr.HTTPExpr, bodies map[string]map[string]*EndpointBodies, api *expr.APIExpr) map[string]*PathItem {
 	var paths = make(map[string]*PathItem)
 	for _, svc := range h.Services {
-		if !mustGenerate(svc.Meta) || !mustGenerate(svc.ServiceExpr.Meta) {
+		if !openapi.MustGenerate(svc.Meta) || !openapi.MustGenerate(svc.ServiceExpr.Meta) {
 			continue
 		}
-
 		exts := openapi.ExtensionsFromExpr(svc.Meta)
 		sbod := bodies[svc.Name()]
 
 		// endpoints
 		for _, e := range svc.HTTPEndpoints {
-			if !mustGenerate(e.Meta) || !mustGenerate(e.MethodExpr.Meta) {
+
+			if !openapi.MustGenerate(e.Meta) || !openapi.MustGenerate(e.MethodExpr.Meta) {
 				continue
 			}
-
 			for _, r := range e.Routes {
 				for _, key := range r.FullPaths() {
 					// Remove any wildcards that is defined in path as a workaround to
@@ -176,7 +171,7 @@ func buildPaths(h *expr.HTTPExpr, bodies map[string]map[string]*EndpointBodies, 
 
 		// file servers
 		for _, f := range svc.FileServers {
-			if !mustGenerate(f.Meta) || !mustGenerate(f.Service.Meta) {
+			if !openapi.MustGenerate(f.Meta) || !openapi.MustGenerate(f.Service.Meta) {
 				continue
 			}
 
@@ -217,6 +212,7 @@ func buildOperation(key string, r *expr.RouteExpr, bodies *EndpointBodies, rand 
 	{
 		summary = fmt.Sprintf("%s %s", e.Name(), svc.Name())
 		setSummary(expr.Root.API.Meta)
+		setSummary(svc.ServiceExpr.Meta)
 		setSummary(r.Endpoint.Meta)
 		setSummary(m.Meta)
 	}
@@ -343,6 +339,8 @@ func buildOperation(key string, r *expr.RouteExpr, bodies *EndpointBodies, rand 
 		}
 	}
 
+	// An endpoint may be marked as deprecated. if the openapi:deprecated tag is present, we populate it to true
+	_, deprecated := e.Meta.Last("openapi:deprecated")
 	return &Operation{
 		Tags:         tagNames,
 		Summary:      summary,
@@ -352,13 +350,13 @@ func buildOperation(key string, r *expr.RouteExpr, bodies *EndpointBodies, rand 
 		RequestBody:  requestBody,
 		Responses:    responses,
 		Security:     buildSecurityRequirements(e.Requirements),
-		Deprecated:   false,
+		Deprecated:   deprecated,
 		ExternalDocs: openapi.DocsFromExpr(m.Docs, m.Meta),
 		Extensions:   openapi.ExtensionsFromExpr(m.Meta),
 	}
 }
 
-// buildOperation builds the OpenAPI Operation object for the given file server.
+// buildFileServerOperation builds the OpenAPI Operation object for the given file server.
 func buildFileServerOperation(key string, fs *expr.HTTPFileServerExpr, api *expr.APIExpr) *Operation {
 	wildcards := expr.ExtractHTTPWildcards(key)
 	svc := fs.Service
@@ -485,12 +483,12 @@ func parseOperationIDTemplate(template, service, method string, routeIndex int) 
 func buildServers(servers []*expr.ServerExpr) []*Server {
 	var svrs []*Server
 	for _, svr := range servers {
-		if !mustGenerate(svr.Meta) {
+		if !openapi.MustGenerate(svr.Meta) {
 			continue
 		}
 		var server *Server
 		for _, host := range svr.Hosts {
-			if !mustGenerate(host.Meta) {
+			if !openapi.MustGenerate(host.Meta) {
 				continue
 			}
 
@@ -552,12 +550,14 @@ func buildSecurityRequirements(reqs []*expr.SecurityExpr) []map[string][]string 
 	for i, req := range reqs {
 		sr := make(map[string][]string, len(req.Schemes))
 		for _, sch := range req.Schemes {
+			scopes := make([]string, 0)
 			switch sch.Kind {
-			case expr.BasicAuthKind, expr.APIKeyKind:
-				sr[sch.Hash()] = []string{}
 			case expr.OAuth2Kind, expr.JWTKind:
-				sr[sch.Hash()] = req.Scopes
+				if len(req.Scopes) > 0 {
+					scopes = req.Scopes
+				}
 			}
+			sr[sch.Hash()] = scopes
 		}
 		srs[i] = sr
 	}
@@ -643,7 +643,7 @@ func buildTags(api *expr.APIExpr) []*openapi.Tag {
 		m[t.Name] = t
 	}
 	for _, s := range api.HTTP.Services {
-		if !mustGenerate(s.Meta) || !mustGenerate(s.ServiceExpr.Meta) {
+		if !openapi.MustGenerate(s.Meta) || !openapi.MustGenerate(s.ServiceExpr.Meta) {
 			continue
 		}
 		for _, t := range openapi.TagsFromExpr(s.Meta) {
@@ -668,7 +668,7 @@ func buildTags(api *expr.APIExpr) []*openapi.Tag {
 			// add service name and description to the tags since we tag every
 			// operation with service name when no custom tag is defined
 			for _, s := range api.HTTP.Services {
-				if !mustGenerate(s.Meta) || !mustGenerate(s.ServiceExpr.Meta) {
+				if !openapi.MustGenerate(s.Meta) || !openapi.MustGenerate(s.ServiceExpr.Meta) {
 					continue
 				}
 				tags = append(tags, &openapi.Tag{
@@ -679,17 +679,4 @@ func buildTags(api *expr.APIExpr) []*openapi.Tag {
 		}
 	}
 	return tags
-}
-
-// mustGenerate returns true if the meta indicates that a OpenAPI specification should be
-// generated, false otherwise.
-func mustGenerate(meta expr.MetaExpr) bool {
-	m, ok := meta.Last("openapi:generate")
-	if !ok {
-		m, ok = meta.Last("swagger:generate")
-	}
-	if ok && m == "false" {
-		return false
-	}
-	return true
 }
