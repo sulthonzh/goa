@@ -17,3 +17,14 @@ cmd/goa/goa
 # DeepSource cruft
 cover.out
 bin/
+# === Code Quality Standards - JS patterns ===
+node_modules/
+dist/
+build/
+.env
+.env.*
+# === Code Quality Standards - Python patterns ===
+__pycache__/
+.venv/
+*.egg-info/
+.mypy_cache/
